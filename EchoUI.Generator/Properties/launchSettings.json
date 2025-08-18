@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "EchoUI.Generator": {
+      "commandName": "DebugRoslynComponent",
+      "targetProject": "..\\EchoUI.Core\\EchoUI.Core.csproj"
+    }
+  }
+}
