@@ -4,6 +4,7 @@ async function handleEvent(e, elementId) {
     let eventArgs = {};
     const eventType = e.type;
 
+    console.log('eventType', eventType);
     // 根据事件类型，构建要发送到 C# 的参数
     if (eventType === 'mousemove' || eventType === 'mousedown' || eventType === 'mouseup') {
         eventArgs = { X: e.offsetX, Y: e.offsetY, Button: e.button };

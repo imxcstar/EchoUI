@@ -15,7 +15,7 @@ namespace EchoUI.Core
 
     public record class NativeProps : Props
     {
-        public string NativeName { get; init; } = null!;
+        public string Type { get; init; } = null!;
         public ValueDictionary<string, object?>? Properties { get; init; }
     }
 
@@ -128,7 +128,7 @@ namespace EchoUI.Core
         /// <summary>
         /// 子元素的布局方向（垂直或水平）。
         /// </summary>
-        public LayoutDirection? Direction { get; init; }
+        public LayoutDirection? Direction { get; init; } = LayoutDirection.Vertical;
         /// <summary>
         /// 子元素在主轴上的对齐方式。
         /// </summary>
@@ -180,6 +180,14 @@ namespace EchoUI.Core
     public record class ButtonProps : Props
     {
         public string Text { get; init; }
+        /// <summary>
+        /// 元素的宽度。
+        /// </summary>
+        public Dimension? Width { get; init; }
+        /// <summary>
+        /// 元素的高度。
+        /// </summary>
+        public Dimension? Height { get; init; }
         public Action<MouseButton>? OnClick { get; init; }
         public Color? BackgroundColor { get; init; }
         public Color? HoverColor { get; init; }
@@ -447,7 +455,8 @@ namespace EchoUI.Core
             return Container(new ContainerProps
             {
                 Key = props.Key,
-                Width = Dimension.Percent(100),
+                Width = props.Width ?? Dimension.Pixels(props.Text.Length * 10),
+                Height = props.Height ?? Dimension.Pixels(30),
                 JustifyContent = JustifyContent.Center,
                 AlignItems = AlignItems.Center,
                 Padding = props.Padding ?? new Spacing(Dimension.Pixels(8), Dimension.Pixels(4)),
@@ -786,6 +795,8 @@ namespace EchoUI.Core
                     {
                         Key = props.Options[index],
                         Width = Dimension.Percent(100),
+                        Height = Dimension.Pixels(35),
+                        JustifyContent = JustifyContent.Center,
                         Padding = new Spacing(Dimension.Pixels(8), Dimension.Pixels(6)),
                         BackgroundColor = moveIndex.Value == index ? Color.Gray : Color.White,
                         OnClick = _ =>
@@ -827,18 +838,20 @@ namespace EchoUI.Core
                     }),
 
                     // Dropdown list (rendered below if open)
-                    isOpen.Value
-                    ? Container(new ContainerProps
+                    Container(new ContainerProps
                     {
                         Width = Dimension.Percent(100),
+                        Height = isOpen.Value ? Dimension.Pixels(35 * props.Options.Count) : Dimension.ZeroPixels,
+                        Transitions = [
+                            [nameof(ContainerProps.Height), new Transition(150, Easing.EaseInOut)]
+                        ],
                         Direction = LayoutDirection.Vertical,
                         BackgroundColor = props.DropdownBackgroundColor ?? Color.White,
-                        BorderWidth = 1,
+                        BorderWidth = isOpen.Value ? 1 : 0,
                         BorderStyle = BorderStyle.Solid,
                         BorderColor = props.BorderColor ?? Color.Gray,
                         Children = dropdownItems
                     })
-                    : Empty()
                 ]
             });
         }
@@ -858,7 +871,7 @@ namespace EchoUI.Core
         [Element(DefaultProperty = nameof(TextProps.Text))]
         public static Element Text(TextProps props) => new(ElementCoreName.Text, props);
 
-        [Element(DefaultProperty = nameof(NativeProps.NativeName))]
-        public static Element Native(NativeProps props) => new(props.NativeName, props);
+        [Element(DefaultProperty = nameof(NativeProps.Type))]
+        public static Element Native(NativeProps props) => new(props.Type, props);
     }
 }

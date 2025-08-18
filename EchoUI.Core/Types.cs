@@ -1,4 +1,6 @@
-﻿namespace EchoUI.Core
+﻿using System.Collections;
+
+namespace EchoUI.Core
 {
     /// <summary>
     /// 颜色
@@ -121,18 +123,253 @@
     /// </summary>
     public enum MouseButton { Left, Right, Middle }
 
-    public readonly record struct ValueDictionary<TKey, TValue>(IReadOnlyDictionary<TKey, TValue> Inner)
+    /// <summary>
+    /// A value-type wrapper for a dictionary that exposes its data
+    /// as a list of key-value pairs.
+    /// </summary>
+    public readonly record struct ValueDictionary<TKey, TValue> : IList<IList<object?>> where TKey : notnull
     {
-        public IReadOnlyDictionary<TKey, TValue> Data => Inner;
+        public IDictionary<TKey, TValue?> Data { get; }
+
+        // --- Implemented Properties ---
+
+        /// <summary>
+        /// Gets the number of key/value pairs contained in the dictionary.
+        /// </summary>
+        public int Count => Data.Count;
+
+        /// <summary>
+        /// Gets a value indicating whether the dictionary is read-only.
+        /// </summary>
+        public bool IsReadOnly => Data.IsReadOnly;
+
+        // --- Constructor ---
+
+        public ValueDictionary(IDictionary<TKey, TValue?> data)
+        {
+            Data = data ?? throw new ArgumentNullException(nameof(data));
+        }
+
+
+        public ValueDictionary()
+        {
+            Data = new Dictionary<TKey, TValue?>();
+        }
+
+        // --- Helper Method ---
+
+        /// <summary>
+        /// Safely parses an IList<object?> into a key and value.
+        /// </summary>
+        private static bool TryParseItem(IList<object?> item, out TKey key, out TValue? value)
+        {
+            key = default!;
+            value = default;
+
+            if (item == null || item.Count != 2 || item[0] is not TKey parsedKey)
+            {
+                return false;
+            }
+
+            key = parsedKey;
+            // Allows value to be null if TValue is a reference type or Nullable<T>
+            if (item[1] is TValue parsedValue)
+            {
+                value = parsedValue;
+            }
+            else if (item[1] == null)
+            {
+                // This is valid if TValue can be null
+                value = default;
+            }
+            else
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+
+        // --- IList<IList<object?>> Implementation ---
+
+        /// <summary>
+        /// Gets the key-value pair at the specified index.
+        /// Setting a value by index is not supported.
+        /// </summary>
+        public IList<object?> this[int index]
+        {
+            get
+            {
+                if (index < 0 || index >= Data.Count)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+                var kvp = Data.ElementAt(index);
+                return new List<object?> { kvp.Key, kvp.Value };
+            }
+            set => throw new NotSupportedException("Replacing an item by index is not supported in a dictionary-backed list.");
+        }
+
+        /// <summary>
+        /// Determines the index of a specific key-value pair in the dictionary.
+        /// </summary>
+        public int IndexOf(IList<object?> item)
+        {
+            if (!TryParseItem(item, out var key, out var value))
+            {
+                return -1;
+            }
+
+            if (Data.TryGetValue(key, out var existingValue) && EqualityComparer<TValue>.Default.Equals(value, existingValue))
+            {
+                int i = 0;
+                foreach (var kvpKey in Data.Keys)
+                {
+                    if (kvpKey.Equals(key))
+                    {
+                        return i;
+                    }
+                    i++;
+                }
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// Inserting an element at a specific index is not supported.
+        /// </summary>
+        public void Insert(int index, IList<object?> item)
+        {
+            if (IsReadOnly) throw new NotSupportedException("Collection is read-only.");
+            if (!TryParseItem(item, out var key, out var value))
+            {
+                throw new ArgumentException("Item must be an IList<object?> with two elements: a non-null key of type TKey and a value of type TValue.", nameof(item));
+            }
+            Data[key] = value;
+        }
+
+        /// <summary>
+        /// Removes the key-value pair at the specified index.
+        /// </summary>
+        public void RemoveAt(int index)
+        {
+            if (IsReadOnly) throw new NotSupportedException("Collection is read-only.");
+            if (index < 0 || index >= Data.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            var keyToRemove = Data.Keys.ElementAt(index);
+            Data.Remove(keyToRemove);
+        }
+
+        /// <summary>
+        /// Adds a key-value pair to the dictionary.
+        /// </summary>
+        public void Add(IList<object?> item)
+        {
+            if (IsReadOnly) throw new NotSupportedException("Collection is read-only.");
+            if (!TryParseItem(item, out var key, out var value))
+            {
+                throw new ArgumentException("Item must be an IList<object?> with two elements: a non-null key of type TKey and a value of type TValue.", nameof(item));
+            }
+            Data[key] = value;
+        }
+
+        /// <summary>
+        /// Removes all keys and values from the dictionary.
+        /// </summary>
+        public void Clear()
+        {
+            if (IsReadOnly) throw new NotSupportedException("Collection is read-only.");
+            Data.Clear();
+        }
+
+        /// <summary>
+        /// Determines whether the dictionary contains a specific key-value pair.
+        /// </summary>
+        public bool Contains(IList<object?> item)
+        {
+            if (!TryParseItem(item, out var key, out var value))
+            {
+                return false;
+            }
+
+            return Data.TryGetValue(key, out var existingValue) && EqualityComparer<TValue>.Default.Equals(value, existingValue);
+        }
+
+        /// <summary>
+        /// Copies the key-value pairs of the dictionary to an Array, starting at a particular Array index.
+        /// </summary>
+        public void CopyTo(IList<object?>[] array, int arrayIndex)
+        {
+            if (array == null) throw new ArgumentNullException(nameof(array));
+            if (arrayIndex < 0) throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+            if (array.Length - arrayIndex < Data.Count) throw new ArgumentException("The destination array has insufficient space.");
+
+            int i = 0;
+            foreach (var kvp in Data)
+            {
+                array[arrayIndex + i] = new List<object?> { kvp.Key, kvp.Value };
+                i++;
+            }
+        }
+
+        /// <summary>
+        /// Removes the first occurrence of a specific key-value pair from the dictionary.
+        /// </summary>
+        public bool Remove(IList<object?> item)
+        {
+            if (IsReadOnly) throw new NotSupportedException("Collection is read-only.");
+            if (!TryParseItem(item, out var key, out var value))
+            {
+                return false;
+            }
+
+            // Must check value equality before removing, per ICollection<KeyValuePair> contract
+            if (Data.TryGetValue(key, out var existingValue) && EqualityComparer<TValue>.Default.Equals(value, existingValue))
+            {
+                return Data.Remove(key);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns an enumerator that iterates through the collection as key-value pair lists.
+        /// </summary>
+        public IEnumerator<IList<object?>> GetEnumerator()
+        {
+            foreach (var kvp in Data)
+            {
+                yield return new List<object?> { kvp.Key, kvp.Value };
+            }
+        }
+
+        /// <summary>
+        /// Returns an enumerator that iterates through a collection.
+        /// </summary>
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        // --- Equality and HashCode (already implemented) ---
 
         public bool Equals(ValueDictionary<TKey, TValue> other) =>
-            Inner.Count == other.Inner.Count &&
-            Inner.All(kvp =>
-                other.Inner.TryGetValue(kvp.Key, out var v) &&
+            Data.Count == other.Data.Count &&
+            Data.All(kvp =>
+                other.Data.TryGetValue(kvp.Key, out var v) &&
                 EqualityComparer<TValue>.Default.Equals(kvp.Value, v));
 
         public override int GetHashCode() =>
-            Inner.Aggregate(0, (hash, kvp) => hash ^ HashCode.Combine(kvp.Key, kvp.Value));
-    }
+            Data.Aggregate(0, (hash, kvp) => hash ^ HashCode.Combine(kvp.Key, kvp.Value));
 
+        // --- Implicit Operator (already implemented) ---
+
+        public static implicit operator ValueDictionary<TKey, TValue>(Dictionary<TKey, TValue> dictionary) =>
+            new(dictionary);
+    }
 }

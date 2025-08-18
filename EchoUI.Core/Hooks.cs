@@ -19,6 +19,8 @@ namespace EchoUI.Core
     {
         public T Value { get; set; }
         public Ref(T value) => Value = value;
+
+        public static implicit operator T(Ref<T> value) => value.Value;
     }
 
     public static class Hooks

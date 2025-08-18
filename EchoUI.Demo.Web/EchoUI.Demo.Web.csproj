@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-
+		
 		<PublishTrimmed>true</PublishTrimmed>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
@@ -15,5 +15,17 @@
 	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Demo\EchoUI.Demo.csproj" />
 		<ProjectReference Include="..\EchoUI.Render.Web\EchoUI.Render.Web.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="wwwroot\img\" />
+	  <Folder Include="wwwroot\libs\" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Content Update="wwwroot\dom.js">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="wwwroot\libs\vconsole\vconsole.min.js">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </Content>
 	</ItemGroup>
 </Project>

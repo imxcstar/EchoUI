@@ -262,8 +262,21 @@ namespace EchoUI.Core
             {
                 if (propInfo.Name == nameof(Props.Children)) continue;
 
+                // Handle NativeProps.Properties by unpacking its contents
+                if (propInfo.Name == nameof(NativeProps.Properties) && props is NativeProps nativeProps && nativeProps.Properties != null)
+                {
+                    foreach (var kvp in nativeProps.Properties.Value.Data)
+                    {
+                        // We add all values, even if null, because they are explicitly set.
+                        patch.UpdatedProperties[kvp.Key] = kvp.Value;
+                        hasContent = true;
+                    }
+                    continue; // Skip adding the 'Properties' object itself to the patch.
+                }
+
                 var value = propInfo.GetValue(props);
 
+                // For other properties, add them if they are not the default value.
                 if (value != null && !value.Equals(GetDefaultValue(propInfo.PropertyType)))
                 {
                     patch.UpdatedProperties[propInfo.Name] = value;
@@ -286,6 +299,7 @@ namespace EchoUI.Core
         private PropertyPatch? DiffProps(Props oldProps, Props newProps)
         {
             var patch = new PropertyPatch();
+            var updatedProperties = new Dictionary<string, object?>();
             var hasChanges = false;
 
             var allPropNames = newProps.GetType().GetProperties().Select(p => p.Name)
@@ -295,6 +309,42 @@ namespace EchoUI.Core
             foreach (var propName in allPropNames)
             {
                 if (propName == nameof(Props.Children)) continue;
+
+                // Special handling for NativeProps.Properties
+                if (propName == nameof(NativeProps.Properties) && (oldProps is NativeProps || newProps is NativeProps))
+                {
+                    var oldNativeProps = oldProps as NativeProps;
+                    var newNativeProps = newProps as NativeProps;
+
+                    var oldDict = oldNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
+                    var newDict = newNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
+                    var allKeys = oldDict.Keys.Union(newDict.Keys).Distinct();
+
+                    foreach (var key in allKeys)
+                    {
+                        oldDict.TryGetValue(key, out var oldPropValue);
+                        newDict.TryGetValue(key, out var newPropValue);
+
+                        bool propertyValueChanged;
+                        var propValueType = newPropValue?.GetType() ?? oldPropValue?.GetType();
+
+                        if (propValueType != null && typeof(Delegate).IsAssignableFrom(propValueType))
+                        {
+                            propertyValueChanged = (oldPropValue == null) != (newPropValue == null);
+                        }
+                        else
+                        {
+                            propertyValueChanged = !Equals(oldPropValue, newPropValue);
+                        }
+
+                        if (propertyValueChanged)
+                        {
+                            updatedProperties[key] = newPropValue; // newPropValue will be null if the key was removed
+                            hasChanges = true;
+                        }
+                    }
+                    continue; // Skip the generic diff for the 'Properties' property itself
+                }
 
                 var oldPropInfo = oldProps.GetType().GetProperty(propName);
                 var newPropInfo = newProps.GetType().GetProperty(propName);
@@ -316,13 +366,18 @@ namespace EchoUI.Core
 
                 if (propertyChanged)
                 {
-                    patch.UpdatedProperties ??= new Dictionary<string, object?>();
-                    patch.UpdatedProperties[propName] = newValue;
+                    updatedProperties[propName] = newValue;
                     hasChanges = true;
                 }
             }
 
-            return hasChanges ? patch : null;
+            if (hasChanges)
+            {
+                patch.UpdatedProperties = updatedProperties;
+                return patch;
+            }
+
+            return null;
         }
 
         #endregion

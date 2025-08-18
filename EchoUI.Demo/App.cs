@@ -1,9 +1,6 @@
 ﻿namespace EchoUI.Demo;
 
 using EchoUI.Core;
-using Markdig;
-using System.ComponentModel;
-using System.Diagnostics;
 using static EchoUI.Core.Elements;
 using static EchoUI.Core.Hooks;
 
@@ -47,9 +44,17 @@ public static Element App() {
             {
                 Key = "Input",
             }),
+            Create(ImageTest, new()
+            {
+                Key = "Image",
+            }),
             Create(Markdown, new()
             {
                 Key = "Markdown",
+            }),
+            Create(OtherTest, new()
+            {
+                Key = "Other",
             }),
         }, []);
 
@@ -58,7 +63,7 @@ public static Element App() {
             Height: Dimension.Percent(100),
             Children: [
                 Tabs(
-                    Titles : ["Counter", "Input", "Markdown"],
+                    Titles : ["Counter", "Input", "Image", "Markdown", "Other"],
                     Content : i => tabsContent[i]
                 )
             ]
@@ -75,7 +80,6 @@ public static Element App() {
             BackgroundColor = Color.White,
             Children =
             [
-                // 直接使用 MarkdownRenderer 组件！
                 EchoUI.Demo.Elements.MarkdownRenderer(new MarkdownProps
                 {
                     Content = SampleMarkdown
@@ -86,94 +90,102 @@ public static Element App() {
 
     public static Element? InputTest(Props props)
     {
-        var (inputText, setInputText, _) = State("");
+        var (inputText, setInputText, _) = State("test");
 
-        return Container(
-            Direction: LayoutDirection.Vertical,
-            Children: [
-                Text(inputText.Value),
-                Container(
-                    Width: Dimension.Percent(100),
-                    Height: Dimension.Pixels(50),
-                    BorderStyle: BorderStyle.Solid,
-                    BorderWidth: 1,
-                    BorderColor: Color.Black,
-                    Children: [
-                        Input(
-                            OnValueChanged: v => setInputText(v)
-                        )
-                    ]    
-                )
-            ]
-        );
+        return Container([
+            Text(inputText.Value),
+            Container(
+                Width: Dimension.Percent(100),
+                Height: Dimension.Pixels(50),
+                BorderStyle: BorderStyle.Solid,
+                BorderWidth: 1,
+                BorderColor: Color.Black,
+                Children: [
+                    Input(
+                        Value: inputText.Value,
+                        OnValueChanged: v => setInputText(v)
+                    )
+                ]
+            )
+        ]);
+    }
+
+    public static Element? ImageTest(Props props)
+    {
+        string[] images = [
+            "/img/1.jpg",
+            "/img/2.jpg"
+        ];
+
+        var (index, _, updateIndex) = State(0);
+        var (select, setSelect, _) = State("Click Image...");
+
+        return Container([
+            Text(select),
+            Native(
+                Type: "img",
+                Properties: [
+                    [ "style", "width: 30px;height: 30px;user-select:none;border-radius:15px" ],
+                    [ "src", images[index] ],
+                    [ "click", (MouseButton v) => setSelect(images[index]) ]
+                ]
+            ),
+            Button(
+                Text: "Next Image",
+                OnClick: _ => updateIndex(i => i + 1 < images.Length ? i + 1 : 0)
+            ),
+        ]);
     }
 
     public static Element? Counter(Props props)
     {
         var (count, setCount, updateCount) = State(0);
-        return Container(
-            Direction: LayoutDirection.Vertical,
-            Children: [
-                Text(
-                    Text : $"count: {count.Value}",
-                    Color : count.Value == 0 ? Color.Black : (count.Value < 0 ? Color.Red : Color.Green)
-                ),
-                Container(
-                    Direction : LayoutDirection.Horizontal,
-                    Padding :  new Spacing(Dimension.Pixels(5)),
-                    Gap : 5,
-                    Children : [
-                        Container(
-                            Height : Dimension.Pixels(30),
-                            Width : Dimension.Pixels(30),
-                            JustifyContent : JustifyContent.Center,
-                            AlignItems : AlignItems.Center,
-                            Children : [
-                                Button(
-                                    Text : "-",
-                                    OnClick : _ => updateCount(v => v - 1)
-                                ),
-                            ]
-                        ),
-                        Container(
-                            Height : Dimension.Pixels(30),
-                            Width : Dimension.Pixels(30),
-                            JustifyContent : JustifyContent.Center,
-                            AlignItems : AlignItems.Center,
-                            Children : [
-                                Button(
-                                    Text : "+",
-                                    OnClick : _ => updateCount(v => v + 1)
-                                ),
-                            ]
-                        ),
-                        Container(
-                            Height : Dimension.Pixels(30),
-                            Width : Dimension.Pixels(80),
-                            JustifyContent : JustifyContent.Center,
-                            AlignItems : AlignItems.Center,
-                            Children : [
-                                Button(
-                                    Text : "Reset",
-                                    OnClick : _ => setCount(0)
-                                ),
-                            ]
-                        )
-                    ]
-                ),
-                Switch(),
-                RadioGroup([
-                    "aaa",
-                    "bbb",
-                    "ccc"
-                ]),
-                CheckBox("test"),
-                ComboBox([
-                    "test1",
-                    "test2",
-                    "test3"
-                ]),
-            ]
-        );
+        return Container([
+            Text(
+                Text : $"count: {count.Value}",
+                Color : count.Value == 0 ? Color.Black : (count.Value < 0 ? Color.Red : Color.Green)
+            ),
+            Container(
+                Direction : LayoutDirection.Horizontal,
+                Padding :  new Spacing(Dimension.Pixels(5)),
+                Gap : 5,
+                Children : [
+                    Button(
+                        Text : "-",
+                        Height : Dimension.Pixels(30),
+                        Width : Dimension.Pixels(30),
+                        OnClick : _ => updateCount(v => v - 1)
+                    ),
+                    Button(
+                        Text : "+",
+                        Height : Dimension.Pixels(30),
+                        Width : Dimension.Pixels(30),
+                        OnClick : _ => updateCount(v => v + 1)
+                    ),
+                    Button(
+                        Text : "Reset",
+                        OnClick : _ => setCount(0)
+                    ),
+                ]
+            ),
+        ]);
+    }
+
+    public static Element? OtherTest(Props props)
+    {
+        return Container([
+            Switch(),
+            RadioGroup([
+                "aaa",
+                "bbb",
+                "ccc"
+            ]),
+            CheckBox("test"),
+            ComboBox([
+                "test1",
+                "test2",
+                "test3"
+            ]),
+        ]);
     }
 }

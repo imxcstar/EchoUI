@@ -99,6 +99,7 @@ namespace EchoUI.Render.Web
                 case InputProps:
                     domPatch.Styles ??= new();
                     domPatch.Styles["width"] = "100%";
+                    domPatch.Styles["height"] = "100%";
                     domPatch.Styles["border"] = "none";
                     break;
             }
@@ -190,7 +191,17 @@ namespace EchoUI.Render.Web
                     break;
 
                 case NativeProps nativeProps:
-
+                    if (nativeProps.Properties == null || !nativeProps.Properties.Value.Data.ContainsKey(propName))
+                        break;
+                    var propValueType = propValue?.GetType();
+                    if (propValueType != null && typeof(Delegate).IsAssignableFrom(propValueType))
+                    {
+                        domPatch.UpdateEvent(propName, propValue);
+                    }
+                    else
+                    {
+                        domPatch.SetAttribute(propName, propValue);
+                    }
                     break;
             }
         }
@@ -261,6 +272,21 @@ namespace EchoUI.Render.Web
             else if (newProps is InputProps ip)
             {
                 UpdateHandler(elementId, "input", ip.OnValueChanged);
+            }
+            else if (newProps is NativeProps nativeProps && nativeProps.Properties != null)
+            {
+                foreach (var item in nativeProps.Properties.Value.Data)
+                {
+                    var propValueType = item.Value?.GetType();
+                    if (propValueType != null && typeof(Delegate).IsAssignableFrom(propValueType))
+                    {
+                        UpdateHandler(elementId, item.Key, item.Value as Delegate);
+                    }
+                    else if (EventHandlers.ContainsKey((elementId, item.Key)))
+                    {
+                        UpdateHandler(elementId, item.Key, null);
+                    }
+                }
             }
         }
 
@@ -340,19 +366,19 @@ namespace EchoUI.Render.Web
 
     internal static partial class DomInterop
     {
-        [JSImport("dom.createElement", "dom.js")]
+        [JSImport("dom.createElement", "dom")]
         internal static partial void CreateElement(string elementId, string type);
 
-        [JSImport("dom.patchProperties", "dom.js")]
+        [JSImport("dom.patchProperties", "dom")]
         internal static partial void PatchProperties(string elementId, string patchJson);
 
-        [JSImport("dom.addChild", "dom.js")]
+        [JSImport("dom.addChild", "dom")]
         internal static partial void AddChild(string parentId, string childId, int index);
 
-        [JSImport("dom.removeChild", "dom.js")]
+        [JSImport("dom.removeChild", "dom")]
         internal static partial void RemoveChild(string parentId, string childId);
 
-        [JSImport("dom.moveChild", "dom.js")]
+        [JSImport("dom.moveChild", "dom")]
         internal static partial void MoveChild(string parentId, string childId, int newIndex);
     }
 
