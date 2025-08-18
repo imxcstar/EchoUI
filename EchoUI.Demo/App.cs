@@ -1,6 +1,8 @@
 ﻿namespace EchoUI.Demo;
 
 using EchoUI.Core;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using static EchoUI.Core.Elements;
 using static EchoUI.Core.Hooks;
 
@@ -112,6 +114,9 @@ public static Element App() {
 
     public static Element? ImageTest(Props props)
     {
+        if (!OperatingSystem.IsBrowser())
+            return Text("Currently only supports browser mode");
+
         string[] images = [
             "/img/1.jpg",
             "/img/2.jpg"

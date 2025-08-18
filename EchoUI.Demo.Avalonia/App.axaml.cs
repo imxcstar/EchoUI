@@ -18,8 +18,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        var renderer = new AvaloniaRenderer();
         var dockPanel = new DockPanel();
+        var renderer = new AvaloniaRenderer(dockPanel);
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new Window();

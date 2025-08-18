@@ -7,8 +7,15 @@
 		<Nullable>enable</Nullable>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+
+		<PublishAot>true</PublishAot>
+		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 
+	<ItemGroup>
+		<RdXmlFile Include="rd.xml" />
+	</ItemGroup>
+	
 	<ItemGroup>
 		<PackageReference Include="Avalonia.Desktop" Version="11.3.3" />
 		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.3" />

@@ -1,616 +1,514 @@
-﻿using System;
+﻿using EchoUI.Core;
+using System;
 using System.Collections.Generic;
-using System.Drawing.Drawing2D;
+using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
-using EchoUI.Core;
-
-// Using statements for WinForms and Drawing are still necessary,
-// but types will be fully qualified where ambiguity exists.
 using System.Windows.Forms;
-using System.Drawing;
-using System.ComponentModel;
+using Color = EchoUI.Core.Color;
+using Point = EchoUI.Core.Point;
 
 namespace EchoUI.Render.Winform
 {
     /// <summary>
     /// Implements the IRenderer interface for Windows Forms.
-    /// Translates EchoUI elements into native WinForms controls.
+    /// Manages and manipulates native WinForms controls.
     /// </summary>
     public class WinformRenderer : IRenderer
     {
-        // A map to store event handlers for each control to allow for unsubscribing later.
-        private readonly Dictionary<Control, Dictionary<string, Delegate>> _eventHandlers = new();
+        private readonly Control _rootContainer;
+        private readonly Dictionary<object, Control> _elements = new();
+        private readonly Dictionary<object, Props> _elementProps = new();
+        private readonly Dictionary<(object, string), Delegate> _eventHandlers = new();
+        private readonly HashSet<(object, string)> _attachedEvents = new();
+
+        public WinformRenderer(Control rootContainer)
+        {
+            _rootContainer = rootContainer ?? throw new ArgumentNullException(nameof(rootContainer));
+            // Ensure the root container can host freely positioned controls
+            if (_rootContainer is Form form)
+            {
+                form.AutoScaleMode = AutoScaleMode.None;
+            }
+        }
+
+        private void InvokeOnUI(Action action)
+        {
+            if (_rootContainer.InvokeRequired)
+            {
+                _rootContainer.Invoke(action);
+            }
+            else
+            {
+                action();
+            }
+        }
 
         public object CreateElement(string type)
         {
-            return type switch
+            var elementId = $"eui-{Guid.NewGuid()}";
+            Control? control = null;
+
+            InvokeOnUI(() =>
             {
-                "Container" => new LayoutablePanel(),
-                "Text" => new ClickThroughLabel(),
-                _ => throw new NotSupportedException($"Native element type '{type}' is not supported.")
-            };
+                control = ToControl(type);
+                control.Tag = elementId; // Store ID for reverse lookup
+                _elements[elementId] = control;
+            });
+
+            return elementId;
         }
 
-        public void SetProps(object nativeElement, Core.Props? oldProps, Core.Props newProps)
+        private Control ToControl(string type)
         {
-            if (nativeElement is not Control control) return;
-
-            // Use pattern matching to handle different prop types
-            switch (newProps)
+            return type switch
             {
-                case ContainerProps p:
-                    SetContainerProps(control, oldProps as ContainerProps, p);
-                    break;
-                case TextProps p:
-                    SetTextProps(control, oldProps as TextProps, p);
-                    break;
-            }
+                ElementCoreName.Container => new Panel { BackColor = System.Drawing.Color.Transparent, Margin = Padding.Empty, Padding = Padding.Empty },
+                ElementCoreName.Text => new Label { AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, BackColor = System.Drawing.Color.Transparent, Margin = Padding.Empty, Padding = Padding.Empty },
+                ElementCoreName.Input => new TextBox { BorderStyle = System.Windows.Forms.BorderStyle.None, Margin = Padding.Empty },
+                _ => new Panel() // Default to Panel for unknown types
+            };
         }
 
         public void AddChild(object parent, object child, int index)
         {
-            if (parent is Control parentControl && child is Control childControl)
+            InvokeOnUI(() =>
             {
+                var parentControl = (parent as string) != null ? _elements[parent] : _rootContainer;
+                var childControl = _elements[child];
+
                 parentControl.Controls.Add(childControl);
                 parentControl.Controls.SetChildIndex(childControl, index);
-            }
+
+                // If the parent is a container, re-apply layout
+                if (parentControl is Panel)
+                {
+                    ApplyFlexboxLayout(parentControl);
+                }
+            });
         }
 
         public void RemoveChild(object parent, object child)
         {
-            if (parent is Control parentControl && child is Control childControl)
+            InvokeOnUI(() =>
             {
+                var parentControl = (parent as string) != null ? _elements[parent] : _rootContainer;
+                var childControl = _elements[child];
+
                 parentControl.Controls.Remove(childControl);
-                childControl.Dispose(); // Clean up resources
-            }
+
+                // If the parent is a container, re-apply layout
+                if (parentControl is Panel)
+                {
+                    ApplyFlexboxLayout(parentControl);
+                }
+            });
         }
 
         public void MoveChild(object parent, object child, int newIndex)
         {
-            if (parent is Control parentControl && child is Control childControl)
+            InvokeOnUI(() =>
             {
+                var parentControl = (parent as string) != null ? _elements[parent] : _rootContainer;
+                var childControl = _elements[child];
+
                 parentControl.Controls.SetChildIndex(childControl, newIndex);
-            }
+
+                // If the parent is a container, re-apply layout
+                if (parentControl is Panel)
+                {
+                    ApplyFlexboxLayout(parentControl);
+                }
+            });
         }
 
-        public IUpdateScheduler GetScheduler(object rootContainer)
+        public void PatchProperties(object nativeElement, Props newProps, PropertyPatch patch)
         {
-            if (rootContainer is not Control control)
+            InvokeOnUI(() =>
             {
-                throw new ArgumentException("The root container must be a System.Windows.Forms.Control.", nameof(rootContainer));
-            }
-            return new WinformsUpdateScheduler(control);
-        }
+                if (!_elements.TryGetValue(nativeElement, out var control)) return;
 
-        #region Prop Setters
+                _elementProps[nativeElement] = newProps;
 
-        private void SetContainerProps(Control control, ContainerProps? oldProps, ContainerProps newProps)
-        {
-            var panel = control as LayoutablePanel;
-            if (panel == null) return;
+                // [!重要!] 始终直接从 newProps 更新 C# 端的事件处理器引用，
+                // 确保即使 Reconciler 没有报告变更，我们也能拿到最新的委托实例。
+                UpdateEventHandlers(nativeElement, newProps);
 
-            // Layout (Size & Margin)
-            UpdateSize(control, oldProps, newProps);
-            UpdateSpacing(control, oldProps?.Margin, newProps.Margin, isMargin: true);
-            UpdateSpacing(control, oldProps?.Padding, newProps.Padding, isMargin: false);
-
-            // Background
-            if (oldProps?.BackgroundColor != newProps.BackgroundColor)
-            {
-                control.BackColor = newProps.BackgroundColor?.ToDrawingColor() ?? SystemColors.Control;
-            }
-
-            // Border
-            if (panel != null)
-            {
-                float scaleFactor = GetDpiScaleFactor(control);
-                bool borderChanged = false;
-                if (oldProps?.BorderStyle != newProps.BorderStyle) { panel.UIBorderStyle = newProps.BorderStyle ?? Core.BorderStyle.None; borderChanged = true; }
-                if (oldProps?.BorderColor != newProps.BorderColor) { panel.UIBorderColor = newProps.BorderColor?.ToDrawingColor() ?? System.Drawing.Color.Black; borderChanged = true; }
-                if (oldProps?.BorderWidth != newProps.BorderWidth) { panel.UIBorderWidth = (newProps.BorderWidth ?? 0f) * scaleFactor; borderChanged = true; }
-                if (oldProps?.BorderRadius != newProps.BorderRadius) { panel.UIBorderRadius = (newProps.BorderRadius ?? 0f) * scaleFactor; borderChanged = true; }
-                if (borderChanged) control.Invalidate();
-            }
-
-            // Child Layout
-            if (panel != null)
-            {
-                float scaleFactor = GetDpiScaleFactor(control);
-                bool layoutChanged = false;
-                if (oldProps?.Direction != newProps.Direction) { panel.UIDirection = newProps.Direction ?? Core.LayoutDirection.Vertical; layoutChanged = true; }
-                if (oldProps?.JustifyContent != newProps.JustifyContent) { panel.UIJustifyContent = newProps.JustifyContent ?? Core.JustifyContent.Start; layoutChanged = true; }
-                if (oldProps?.AlignItems != newProps.AlignItems) { panel.UIAlignItems = newProps.AlignItems ?? Core.AlignItems.Start; layoutChanged = true; }
-                if (oldProps?.Gap != newProps.Gap) { panel.UIGap = (newProps.Gap ?? 0f) * scaleFactor; layoutChanged = true; }
-                if (layoutChanged) control.PerformLayout();
-            }
-
-            // Interactions
-            UpdateEventHandler(control, "MouseMove", oldProps?.OnMouseMove, newProps.OnMouseMove, (Action<Core.Point> a) =>
-                new MouseEventHandler((sender, e) =>
+                // 处理由 Reconciler 确认需要更新的属性
+                if (patch.UpdatedProperties != null)
                 {
-                    a(new Core.Point(e.X, e.Y));
-                }));
-
-            UpdateEventHandler(control, "MouseEnter", oldProps?.OnMouseEnter, newProps.OnMouseEnter, (Action a) =>
-                new EventHandler((sender, e) => a()));
-
-            UpdateEventHandler(control, "MouseLeave", oldProps?.OnMouseLeave, newProps.OnMouseLeave, (Action a) =>
-                new EventHandler((sender, e) => a()));
-
-            UpdateEventHandler(control, "MouseDown", oldProps?.OnMouseDown, newProps.OnMouseDown, (Action a) =>
-                new MouseEventHandler((sender, e) =>
-                {
-                    (sender as Control)?.Focus();
-                    a();
-                }));
-
-            UpdateEventHandler(control, "MouseUp", oldProps?.OnMouseUp, newProps.OnMouseUp, (Action a) =>
-                new MouseEventHandler((sender, e) =>
-                {
-                    (sender as Control)?.Focus();
-                    a();
-                }));
-
-            UpdateEventHandler(control, "MouseUp", oldProps?.OnClick, newProps.OnClick, (Action<Core.MouseButton> a) =>
-                new MouseEventHandler((sender, e) =>
-                {
-                    (sender as Control)?.Focus();
-                    // 这里可以判断一下控件是否还处于按下状态，防止意外触发，但通常直接执行逻辑即可
-                    var button = e.Button switch
+                    foreach (var (propName, propValue) in patch.UpdatedProperties)
                     {
-                        MouseButtons.Left => Core.MouseButton.Left,
-                        MouseButtons.Right => Core.MouseButton.Right,
-                        _ => Core.MouseButton.Middle
-                    };
-                    a(button);
-                }));
+                        TranslatePropertyToControl(control, newProps, propName, propValue);
+                    }
+                }
 
-            UpdateEventHandler(control, "KeyDown", oldProps?.OnKeyDown, newProps.OnKeyDown, (Action<int> a) =>
-                new KeyEventHandler((sender, e) =>
+                // [!重要!] 为了保持不同平台的一致性，为不同类型的元素应用默认样式
+                // In WinForms, these are best set once at creation or managed via properties.
+                // The ToControl method handles initial defaults.
+                switch (newProps)
                 {
-                    a(e.KeyValue);
-                }));
+                    case InputProps:
+                        // These styles are effectively managed by setting Dock = Fill or similar
+                        control.Dock = DockStyle.Fill;
+                        break;
+                }
 
-            UpdateEventHandler(control, "KeyUp", oldProps?.OnKeyUp, newProps.OnKeyUp, (Action<int> a) =>
-                new KeyEventHandler((sender, e) =>
+                // If the control is a container and layout properties might have changed, re-apply layout.
+                if (control.Parent is Panel)
                 {
-                    a(e.KeyValue);
-                }));
+                    ApplyFlexboxLayout(control.Parent);
+                }
+            });
         }
 
-        private void SetTextProps(Control control, TextProps? oldProps, TextProps newProps)
+        /// <summary>
+        /// 将 Reconciler 传入的单个属性变更转换为具体的、可序列化的 DOM/CSS 变更。
+        /// </summary>
+        private void TranslatePropertyToControl(Control control, object props, string propName, object? propValue)
         {
-            if (control is not ClickThroughLabel label) return;
-
-            if (oldProps?.Text != newProps.Text)
+            switch (props)
             {
-                label.Text = newProps.Text;
-            }
-            if (oldProps?.Color != newProps.Color)
-            {
-                label.ForeColor = newProps.Color?.ToDrawingColor() ?? SystemColors.ControlText;
-            }
+                case ContainerProps:
+                    switch (propName)
+                    {
+                        // --- Layout ---
+                        case nameof(ContainerProps.Width): control.Width = (int)ToPixels(propValue as Dimension?); break;
+                        case nameof(ContainerProps.Height): control.Height = (int)ToPixels(propValue as Dimension?); break;
+                        case nameof(ContainerProps.MinWidth): control.MinimumSize = new Size((int)ToPixels(propValue as Dimension?), control.MinimumSize.Height); break;
+                        case nameof(ContainerProps.MinHeight): control.MinimumSize = new Size(control.MinimumSize.Width, (int)ToPixels(propValue as Dimension?)); break;
+                        case nameof(ContainerProps.MaxWidth): control.MaximumSize = new Size((int)ToPixels(propValue as Dimension?, 10000), control.MaximumSize.Height); break;
+                        case nameof(ContainerProps.MaxHeight): control.MaximumSize = new Size(control.MaximumSize.Width, (int)ToPixels(propValue as Dimension?, 10000)); break;
+                        case nameof(ContainerProps.Margin): control.Margin = ToWinformsPadding(propValue as Spacing?); break;
+                        case nameof(ContainerProps.Padding): control.Padding = ToWinformsPadding(propValue as Spacing?); break;
 
-            // Check if any font-related properties have changed.
-            bool fontChanged = oldProps?.FontFamily != newProps.FontFamily ||
-                               oldProps?.FontSize != newProps.FontSize;
+                        // --- Flexbox --- (Handled by ApplyFlexboxLayout)
+                        case nameof(ContainerProps.Direction):
+                        case nameof(ContainerProps.JustifyContent):
+                        case nameof(ContainerProps.AlignItems):
+                        case nameof(ContainerProps.Gap):
+                            ApplyFlexboxLayout(control);
+                            break;
 
-            if (fontChanged)
-            {
-                // 1. Get the DPI scale factor for this specific control.
-                float scaleFactor = GetDpiScaleFactor(label);
+                        // --- Appearance ---
+                        case nameof(ContainerProps.BackgroundColor): control.BackColor = ToWinformsColor(propValue as Color?); break;
+                        case nameof(ContainerProps.BorderStyle):
+                            if (control is Panel p) p.BorderStyle = ToWinformsBorderStyle(propValue as Core.BorderStyle?);
+                            break;
+                        // BorderColor, BorderWidth, BorderRadius would require custom drawing via the Paint event, which is more advanced.
 
-                // Keep a reference to the old font to dispose of it later.
-                var oldFont = label.Font;
+                        // --- Events ---
+                        case nameof(ContainerProps.OnClick): ManageEventSubscription<EventHandler>(control, "Click", propValue, (c, h) => c.Click += h, (c, h) => c.Click -= h, HandleClick); break;
+                        case nameof(ContainerProps.OnMouseMove): ManageEventSubscription<MouseEventHandler>(control, "MouseMove", propValue, (c, h) => c.MouseMove += h, (c, h) => c.MouseMove -= h, HandleMouseMove); break;
+                        case nameof(ContainerProps.OnMouseDown): ManageEventSubscription<MouseEventHandler>(control, "MouseDown", propValue, (c, h) => c.MouseDown += h, (c, h) => c.MouseDown -= h, HandleMouseDown); break;
+                        case nameof(ContainerProps.OnMouseUp): ManageEventSubscription<MouseEventHandler>(control, "MouseUp", propValue, (c, h) => c.MouseUp += h, (c, h) => c.MouseUp -= h, HandleMouseUp); break;
+                        case nameof(ContainerProps.OnMouseEnter): ManageEventSubscription<EventHandler>(control, "MouseEnter", propValue, (c, h) => c.MouseEnter += h, (c, h) => c.MouseEnter -= h, HandleGenericEvent); break;
+                        case nameof(ContainerProps.OnMouseLeave): ManageEventSubscription<EventHandler>(control, "MouseLeave", propValue, (c, h) => c.MouseLeave += h, (c, h) => c.MouseLeave -= h, HandleGenericEvent); break;
+                        case nameof(ContainerProps.OnKeyDown): ManageEventSubscription<KeyEventHandler>(control, "KeyDown", propValue, (c, h) => c.KeyDown += h, (c, h) => c.KeyDown -= h, HandleKey); break;
+                        case nameof(ContainerProps.OnKeyUp): ManageEventSubscription<KeyEventHandler>(control, "KeyUp", propValue, (c, h) => c.KeyUp += h, (c, h) => c.KeyUp -= h, HandleKey); break;
+                    }
+                    break;
 
-                // 2. Determine the base font family and size from your props.
-                var family = newProps.FontFamily ?? oldFont.FontFamily.Name;
-                // Use the old font's unscaled size as a fallback if the new prop is null.
-                // NOTE: We must use the *unscaled* size from oldFont for this to work.
-                // oldFont.Size is already scaled, so we divide by the scale factor to get back to the base size.
-                var baseSize = newProps.FontSize ?? (oldFont.Size / (GetDpiScaleFactor(label)));
+                case TextProps:
+                    var label = (Label)control;
+                    switch (propName)
+                    {
+                        // --- Text ---
+                        case nameof(TextProps.Text): label.Text = propValue as string; break;
+                        case nameof(TextProps.FontFamily): label.Font = new Font(propValue as string ?? label.Font.FontFamily.Name, label.Font.Size, label.Font.Style); break;
+                        case nameof(TextProps.FontSize): label.Font = new Font(label.Font.FontFamily, (float?)propValue ?? label.Font.Size, label.Font.Style); break;
+                        case nameof(TextProps.Color): label.ForeColor = ToWinformsColor(propValue as Color?); break;
+                        case nameof(TextProps.MouseThrough): control.Enabled = !((bool?)propValue == true); break;
+                    }
+                    break;
 
-                // 3. Apply the scaling factor to the base font size.
-                var scaledSize = baseSize * scaleFactor;
-
-                // 4. Create the new font with the correctly SCALED size.
-                label.Font = new System.Drawing.Font(family, scaledSize);
-
-                // 5. IMPORTANT: Dispose the old font to prevent resource leaks. You already did this correctly!
-                oldFont.Dispose();
-            }
-
-            if (oldProps?.MouseThrough != newProps.MouseThrough)
-            {
-                label.MouseThrough = newProps.MouseThrough;
+                case InputProps:
+                    var textBox = (TextBox)control;
+                    switch (propName)
+                    {
+                        // --- Input ---
+                        case nameof(InputProps.Value): textBox.Text = propValue as string; break;
+                        case nameof(InputProps.OnValueChanged): ManageEventSubscription<EventHandler>(control, "TextChanged", propValue, (c, h) => c.TextChanged += h, (c, h) => c.TextChanged -= h, HandleTextChanged); break;
+                    }
+                    break;
             }
         }
 
+        #region Converters
+        private float ToPixels(Dimension? dim, float defaultValue = 0) => dim.HasValue && dim.Value.Unit == DimensionUnit.Pixels ? dim.Value.Value : defaultValue;
+        private System.Drawing.Color ToWinformsColor(Color? color) => color.HasValue ? System.Drawing.Color.FromArgb(color.Value.A, color.Value.R, color.Value.G, color.Value.B) : System.Drawing.Color.Transparent;
+        private Padding ToWinformsPadding(Spacing? spacing)
+        {
+            if (!spacing.HasValue) return Padding.Empty;
+            return new Padding(
+                (int)ToPixels(spacing.Value.Left),
+                (int)ToPixels(spacing.Value.Top),
+                (int)ToPixels(spacing.Value.Right),
+                (int)ToPixels(spacing.Value.Bottom)
+            );
+        }
+        private System.Windows.Forms.BorderStyle ToWinformsBorderStyle(Core.BorderStyle? style) => style switch
+        {
+            EchoUI.Core.BorderStyle.Solid => System.Windows.Forms.BorderStyle.FixedSingle,
+            EchoUI.Core.BorderStyle.None => System.Windows.Forms.BorderStyle.None,
+            _ => System.Windows.Forms.BorderStyle.None
+        };
         #endregion
 
-        #region Helper Methods
-        private float GetDpiScaleFactor(Control control)
+        #region Event Handling
+        /// <summary>
+        /// 始终同步 C# 端的事件处理器字典，确保回调使用最新的委托实例。
+        /// </summary>
+        private void UpdateEventHandlers(object elementId, Props newProps)
         {
-            // The base DPI in Windows is 96.
-            // DeviceDpi gives the current DPI of the monitor the control is on.
-            // This requires HighDpiMode.PerMonitorV2, which you've already set.
-            return control.DeviceDpi / 96.0f;
-        }
-
-        private void UpdateSize(Control control, ContainerProps? oldProps, ContainerProps newProps)
-        {
-            float scaleFactor = GetDpiScaleFactor(control);
-
-            // Helper to calculate a pixel value from a Dimension struct.
-            // It now correctly handles the case where a parent is not yet available for percentage calculations.
-            int GetPixelValue(Dimension? dim, int? parentDimensionSize)
+            if (newProps is ContainerProps p)
             {
-                if (dim == null) return -1; // Sentinel for "not specified"
-
-                switch (dim.Value.Unit)
-                {
-                    case DimensionUnit.Pixels:
-                        // Apply the scaling factor here!
-                        return (int)(dim.Value.Value * scaleFactor);
-                    case DimensionUnit.Percent:
-                        return parentDimensionSize.HasValue
-                            ? (int)(parentDimensionSize.Value * dim.Value.Value / 100f)
-                            : -1; // Cannot calculate percent without a parent
-                    default: // Includes Auto
-                        return -1;
-                }
+                UpdateHandler(elementId, "Click", p.OnClick);
+                UpdateHandler(elementId, "MouseMove", p.OnMouseMove);
+                UpdateHandler(elementId, "MouseDown", p.OnMouseDown);
+                UpdateHandler(elementId, "MouseUp", p.OnMouseUp);
+                UpdateHandler(elementId, "MouseEnter", p.OnMouseEnter);
+                UpdateHandler(elementId, "MouseLeave", p.OnMouseLeave);
+                UpdateHandler(elementId, "KeyDown", p.OnKeyDown);
+                UpdateHandler(elementId, "KeyUp", p.OnKeyUp);
             }
-
-            bool isAutoSize = newProps.Width?.Unit == DimensionUnit.Auto || newProps.Height?.Unit == DimensionUnit.Auto;
-            if (control.AutoSize != isAutoSize)
+            else if (newProps is InputProps ip)
             {
-                control.AutoSize = isAutoSize;
-            }
-
-            var parent = control.Parent;
-            int? parentWidth = parent?.ClientSize.Width;
-            int? parentHeight = parent?.ClientSize.Height;
-
-            int w = GetPixelValue(newProps.Width, parentWidth);
-            if (w != -1 && control.Width != w)
-            {
-                control.Width = w;
-            }
-
-            int h = GetPixelValue(newProps.Height, parentHeight);
-            if (h != -1 && control.Height != h)
-            {
-                control.Height = h;
-            }
-
-            int minW = GetPixelValue(newProps.MinWidth, parentWidth);
-            int minH = GetPixelValue(newProps.MinHeight, parentHeight);
-            var newMinSize = new System.Drawing.Size(minW != -1 ? minW : 0, minH != -1 ? minH : 0);
-            if (control.MinimumSize != newMinSize)
-            {
-                control.MinimumSize = newMinSize;
-            }
-
-            int maxW = GetPixelValue(newProps.MaxWidth, parentWidth);
-            int maxH = GetPixelValue(newProps.MaxHeight, parentHeight);
-            var newMaxSize = new System.Drawing.Size(maxW != -1 ? maxW : 0, maxH != -1 ? maxH : 0);
-            if (control.MaximumSize != newMaxSize)
-            {
-                control.MaximumSize = newMaxSize;
+                UpdateHandler(elementId, "TextChanged", ip.OnValueChanged);
             }
         }
 
-        private void UpdateSpacing(Control control, Spacing? oldSpacing, Spacing? newSpacing, bool isMargin)
+        private void UpdateHandler(object elementId, string eventName, Delegate? handler)
         {
-            if (oldSpacing == newSpacing) return;
-
-            float scaleFactor = GetDpiScaleFactor(control);
-            var s = newSpacing ?? default;
-            var padding = new System.Windows.Forms.Padding(
-                (int)(s.Left.Value * scaleFactor),
-                (int)(s.Top.Value * scaleFactor),
-                (int)(s.Right.Value * scaleFactor),
-                (int)(s.Bottom.Value * scaleFactor)
-            );
-
-            if (isMargin)
+            var key = (elementId, eventName);
+            if (handler != null)
             {
-                if (control.Margin != padding) control.Margin = padding;
+                _eventHandlers[key] = handler;
             }
             else
             {
-                if (control.Padding != padding) control.Padding = padding;
+                _eventHandlers.Remove(key);
             }
         }
 
-        private void UpdateEventHandler<T>(Control control, string eventName, T? oldAction, T newAction, Func<T, Delegate> converter) where T : Delegate
+        private void ManageEventSubscription<TEventArgs>(Control control, string eventName, object? handler, Action<Control, EventHandler<TEventArgs>> add, Action<Control, EventHandler<TEventArgs>> remove, EventHandler<TEventArgs> staticHandler) where TEventArgs : EventArgs
         {
-            if (EqualityComparer<T>.Default.Equals(oldAction, newAction)) return;
+            var key = (control.Tag, eventName);
+            bool shouldBeAttached = handler != null;
+            bool isAttached = _attachedEvents.Contains(key);
 
-            if (!_eventHandlers.ContainsKey(control))
+            if (shouldBeAttached && !isAttached)
             {
-                _eventHandlers[control] = new Dictionary<string, Delegate>();
+                add(control, staticHandler);
+                _attachedEvents.Add(key);
             }
-
-            var ev = control.GetType().GetEvent(eventName);
-            if (ev == null) return;
-
-            // Unsubscribe old handler if it exists
-            if (oldAction != null && _eventHandlers[control].TryGetValue(eventName, out var oldHandlerDelegate))
+            else if (!shouldBeAttached && isAttached)
             {
-                ev.RemoveEventHandler(control, oldHandlerDelegate);
-                _eventHandlers[control].Remove(eventName);
+                remove(control, staticHandler);
+                _attachedEvents.Remove(key);
             }
+        }
 
-            // Subscribe new handler if it exists
-            if (newAction != null)
+        // Overload for simple EventHandler
+        private void ManageEventSubscription<T>(Control control, string eventName, object? handler, Action<Control, T> add, Action<Control, T> remove, T staticHandler)
+        {
+            var key = (control.Tag, eventName);
+            bool shouldBeAttached = handler != null;
+            bool isAttached = _attachedEvents.Contains(key);
+
+            if (shouldBeAttached && !isAttached)
             {
-                var newHandler = converter(newAction);
-                ev.AddEventHandler(control, newHandler);
-                _eventHandlers[control][eventName] = newHandler;
+                add(control, staticHandler);
+                _attachedEvents.Add(key);
+            }
+            else if (!shouldBeAttached && isAttached)
+            {
+                remove(control, staticHandler);
+                _attachedEvents.Remove(key);
+            }
+        }
+
+        private void HandleGenericEvent(object sender, EventArgs e)
+        {
+            var control = (Control)sender;
+            var eventName = e.GetType().Name.Replace("EventArgs", "");
+            if (_eventHandlers.TryGetValue((control.Tag, eventName), out var handler) && handler is Action action)
+            {
+                action.Invoke();
+            }
+        }
+
+        private void HandleClick(object sender, EventArgs e)
+        {
+            var control = (Control)sender;
+            if (_eventHandlers.TryGetValue((control.Tag, "Click"), out var handler) && handler is Action action)
+            {
+                action.Invoke();
+            }
+        }
+
+        private void HandleTextChanged(object sender, EventArgs e)
+        {
+            var control = (Control)sender;
+            if (_eventHandlers.TryGetValue((control.Tag, "TextChanged"), out var handler) && handler is Action<string> action)
+            {
+                action.Invoke(control.Text);
+            }
+        }
+
+        private void HandleMouseMove(object sender, MouseEventArgs e)
+        {
+            var control = (Control)sender;
+            if (_eventHandlers.TryGetValue((control.Tag, "MouseMove"), out var handler) && handler is Action<Point> action)
+            {
+                action.Invoke(new Point(e.X, e.Y));
+            }
+        }
+
+        private void HandleMouseDown(object sender, MouseEventArgs e)
+        {
+            var control = (Control)sender;
+            if (_eventHandlers.TryGetValue((control.Tag, "MouseDown"), out var handler) && handler is Action<MouseButton> action)
+            {
+                action.Invoke(e.Button == MouseButtons.Left ? MouseButton.Left : e.Button == MouseButtons.Right ? MouseButton.Right : MouseButton.Middle);
+            }
+        }
+
+        private void HandleMouseUp(object sender, MouseEventArgs e)
+        {
+            var control = (Control)sender;
+            if (_eventHandlers.TryGetValue((control.Tag, "MouseUp"), out var handler) && handler is Action<MouseButton> action)
+            {
+                action.Invoke(e.Button == MouseButtons.Left ? MouseButton.Left : e.Button == MouseButtons.Right ? MouseButton.Right : MouseButton.Middle);
+            }
+        }
+
+        private void HandleKey(object sender, KeyEventArgs e)
+        {
+            var control = (Control)sender;
+            var eventName = e.GetType().Name.Replace("EventArgs", "");
+            if (_eventHandlers.TryGetValue((control.Tag, eventName), out var handler) && handler is Action<int> action)
+            {
+                action.Invoke(e.KeyValue);
             }
         }
 
         #endregion
-    }
 
-    /// <summary>
-    /// A custom panel that supports drawing advanced borders and laying out children
-    /// in a flexbox-like manner.
-    /// </summary>
-    public class LayoutablePanel : Panel
-    {
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public System.Drawing.Color UIBorderColor { get; set; } = System.Drawing.Color.Black;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public float UIBorderWidth { get; set; } = 0f;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public float UIBorderRadius { get; set; } = 0f;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public Core.BorderStyle UIBorderStyle { get; set; } = Core.BorderStyle.None;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-
-        public Core.LayoutDirection UIDirection { get; set; } = Core.LayoutDirection.Vertical;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public Core.JustifyContent UIJustifyContent { get; set; } = Core.JustifyContent.Start;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public Core.AlignItems UIAlignItems { get; set; } = Core.AlignItems.Start;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public float UIGap { get; set; } = 0f;
-
-        public LayoutablePanel()
+        #region Flexbox Layout
+        private void ApplyFlexboxLayout(Control parentControl)
         {
-            this.DoubleBuffered = true;
-            this.SetStyle(ControlStyles.Selectable, true);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-
-            if (UIBorderStyle != Core.BorderStyle.None && UIBorderWidth > 0)
+            if (!_elementProps.TryGetValue(parentControl.Tag, out var props) || props is not ContainerProps containerProps)
             {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-                using var pen = new Pen(UIBorderColor, UIBorderWidth);
-                switch (UIBorderStyle)
-                {
-                    case Core.BorderStyle.Dashed:
-                        pen.DashStyle = DashStyle.Dash;
-                        break;
-                    case Core.BorderStyle.Dotted:
-                        pen.DashStyle = DashStyle.Dot;
-                        break;
-                }
-
-                if (UIBorderRadius > 0)
-                {
-                    using var path = GetRoundedRectPath(ClientRectangle, UIBorderRadius, UIBorderWidth);
-                    e.Graphics.DrawPath(pen, path);
-                }
-                else
-                {
-                    float halfWidth = UIBorderWidth / 2;
-                    e.Graphics.DrawRectangle(pen, halfWidth, halfWidth, this.ClientSize.Width - UIBorderWidth, this.ClientSize.Height - UIBorderWidth);
-                }
+                return;
             }
-        }
 
-        private static GraphicsPath GetRoundedRectPath(System.Drawing.RectangleF rect, float radius, float borderWidth)
-        {
-            var path = new GraphicsPath();
-            float d = radius * 2;
-            float innerOffset = borderWidth;
-            System.Drawing.RectangleF innerRect = new System.Drawing.RectangleF(rect.X + innerOffset / 2, rect.Y + innerOffset / 2, rect.Width - innerOffset, rect.Height - innerOffset);
-
-            if (d > innerRect.Width) d = innerRect.Width;
-            if (d > innerRect.Height) d = innerRect.Height;
-
-            path.AddArc(innerRect.X, innerRect.Y, d, d, 180, 90);
-            path.AddArc(innerRect.Right - d, innerRect.Y, d, d, 270, 90);
-            path.AddArc(innerRect.Right - d, innerRect.Bottom - d, d, d, 0, 90);
-            path.AddArc(innerRect.X, innerRect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        protected override void OnLayout(LayoutEventArgs le)
-        {
-            base.OnLayout(le);
-
-            var children = this.Controls.Cast<Control>().Where(c => c.Visible).ToList();
+            var children = parentControl.Controls.Cast<Control>().ToList();
             if (children.Count == 0) return;
 
-            bool isVertical = UIDirection == Core.LayoutDirection.Vertical;
-            var clientRect = this.ClientRectangle;
-            var availableSize = clientRect.Size - this.Padding.Size;
-            float totalGap = Math.Max(0, children.Count - 1) * UIGap;
+            bool isHorizontal = containerProps.Direction.GetValueOrDefault(LayoutDirection.Horizontal) == LayoutDirection.Horizontal;
+            float gap = containerProps.Gap.GetValueOrDefault(0);
 
-            if (UIJustifyContent == Core.JustifyContent.Stretch)
+            // Calculate total size of children along the main axis
+            float totalChildrenSize = children.Sum(c => isHorizontal ? c.Width + c.Margin.Horizontal : c.Height + c.Margin.Vertical);
+            float totalGap = Math.Max(0, children.Count - 1) * gap;
+            float totalContentSize = totalChildrenSize + totalGap;
+
+            float freeSpace = (isHorizontal ? parentControl.ClientSize.Width : parentControl.ClientSize.Height) - totalContentSize;
+
+            float startOffset = 0;
+            switch (containerProps.JustifyContent.GetValueOrDefault(JustifyContent.Start))
             {
-                float mainAxisTotalSize = isVertical ? availableSize.Height : availableSize.Width;
-                float totalMargins = children.Sum(c => isVertical ? c.Margin.Vertical : c.Margin.Horizontal);
-                float spaceForChildrenSizing = mainAxisTotalSize - totalGap - totalMargins;
-
-                if (spaceForChildrenSizing > 0)
-                {
-                    float sizePerChild = spaceForChildrenSizing / children.Count;
-                    foreach (var child in children)
-                    {
-                        if (isVertical)
-                        {
-                            child.Height = (int)sizePerChild;
-                        }
-                        else
-                        {
-                            child.Width = (int)sizePerChild;
-                        }
-                    }
-                }
+                case JustifyContent.Center:
+                    startOffset = freeSpace / 2;
+                    break;
+                case JustifyContent.End:
+                    startOffset = freeSpace;
+                    break;
+                case JustifyContent.SpaceAround:
+                    startOffset = freeSpace / (children.Count * 2);
+                    break;
+                case JustifyContent.SpaceBetween:
+                    startOffset = 0;
+                    break;
             }
 
-            float totalChildrenSize = children.Sum(c => isVertical ? c.Height + c.Margin.Vertical : c.Width + c.Margin.Horizontal);
-            float remainingSpace = (isVertical ? availableSize.Height : availableSize.Width) - totalChildrenSize - totalGap;
-
-            float currentPos = isVertical ? this.Padding.Top : this.Padding.Left;
-            float spacing = 0;
-
-            switch (UIJustifyContent)
+            float currentPos = startOffset;
+            if (containerProps.JustifyContent == JustifyContent.SpaceAround)
             {
-                // After sizing, Stretch behaves like Start for positioning
-                case Core.JustifyContent.Stretch:
-                case Core.JustifyContent.Start:
-                    break;
-                case Core.JustifyContent.Center:
-                    currentPos += remainingSpace / 2;
-                    break;
-                case Core.JustifyContent.End:
-                    currentPos += remainingSpace;
-                    break;
-                case Core.JustifyContent.SpaceBetween:
-                    if (children.Count > 1) spacing = remainingSpace / (children.Count - 1);
-                    break;
-                case Core.JustifyContent.SpaceAround:
-                    if (children.Count > 0)
-                    {
-                        spacing = remainingSpace / children.Count;
-                        currentPos += spacing / 2;
-                    }
-                    break;
+                currentPos = freeSpace / (children.Count + 1);
             }
 
             foreach (var child in children)
             {
-                // Main Axis Positioning
-                if (isVertical)
+                // Align on cross-axis
+                float crossAxisPos = 0;
+                switch (containerProps.AlignItems.GetValueOrDefault(AlignItems.Start))
                 {
-                    currentPos += child.Margin.Top;
-                    child.Top = (int)currentPos;
-                    currentPos += child.Height + child.Margin.Bottom + UIGap + spacing;
-                }
-                else
-                {
-                    currentPos += child.Margin.Left;
-                    child.Left = (int)currentPos;
-                    currentPos += child.Width + child.Margin.Right + UIGap + spacing;
-                }
-
-                // Cross Axis Alignment
-                float crossSize = isVertical ? availableSize.Width : availableSize.Height;
-                float childCrossSize = isVertical ? child.Width + child.Margin.Horizontal : child.Height + child.Margin.Vertical;
-                float crossPos = isVertical ? this.Padding.Left : this.Padding.Top;
-
-                switch (UIAlignItems)
-                {
-                    case Core.AlignItems.Start:
+                    case AlignItems.Center:
+                        crossAxisPos = ((isHorizontal ? parentControl.ClientSize.Height : parentControl.ClientSize.Width) - (isHorizontal ? child.Height : child.Width)) / 2.0f;
                         break;
-                    case Core.AlignItems.Center:
-                        crossPos += (crossSize - childCrossSize) / 2;
-                        break;
-                    case Core.AlignItems.End:
-                        crossPos += crossSize - childCrossSize;
-                        break;
-                    case Core.AlignItems.Stretch:
-                        if (isVertical) child.Width = (int)crossSize - child.Margin.Horizontal;
-                        else child.Height = (int)crossSize - child.Margin.Vertical;
+                    case AlignItems.End:
+                        crossAxisPos = (isHorizontal ? parentControl.ClientSize.Height : parentControl.ClientSize.Width) - (isHorizontal ? child.Height : child.Width);
                         break;
                 }
 
-                if (isVertical)
+                // Position on main-axis
+                var locationX = isHorizontal ? (int)currentPos + child.Margin.Left : (int)crossAxisPos + child.Margin.Left;
+                var locationY = isHorizontal ? (int)crossAxisPos + child.Margin.Top : (int)currentPos + child.Margin.Top;
+                child.Location = new System.Drawing.Point(locationX, locationY);
+
+                currentPos += (isHorizontal ? child.Width + child.Margin.Horizontal : child.Height + child.Margin.Vertical) + gap;
+
+                if (containerProps.JustifyContent == JustifyContent.SpaceBetween && children.Count > 1)
                 {
-                    child.Left = (int)crossPos + child.Margin.Left;
+                    currentPos += freeSpace / (children.Count - 1);
                 }
-                else
+                else if (containerProps.JustifyContent == JustifyContent.SpaceAround)
                 {
-                    child.Top = (int)crossPos + child.Margin.Top;
+                    currentPos += freeSpace / (children.Count + 1);
                 }
             }
         }
-    }
+        #endregion
 
-    public class ClickThroughLabel : Label
-    {
-        private const int WM_NCHITTEST = 0x84;
-        private const int HTTRANSPARENT = -1;
-
-        /// <summary>
-        /// Gets or sets a value indicating whether mouse events should pass through this label.
-        /// </summary>
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        /// <summary>
-        /// Gets or sets a value indicating whether mouse events should pass through this label.
-        /// </summary>
-        public bool MouseThrough { get; set; } = false;
-
-        public ClickThroughLabel()
+        public IUpdateScheduler GetScheduler(object rootContainer)
         {
-            this.AutoSize = true;
-            this.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            // 如果启用了穿透，并且收到了鼠标命中测试消息
-            if (MouseThrough && m.Msg == WM_NCHITTEST)
-            {
-                // 将消息结果设置为“透明”，然后直接返回
-                m.Result = (IntPtr)HTTRANSPARENT;
-                return;
-            }
-
-            // 否则，按正常方式处理消息
-            base.WndProc(ref m);
+            return new WinformUpdateScheduler((Control)rootContainer);
         }
     }
 
     /// <summary>
-    /// Schedules updates on the WinForms UI thread.
+    /// A scheduler that ensures UI updates run on the correct thread for WinForms.
     /// </summary>
-    public class WinformsUpdateScheduler : IUpdateScheduler
+    public class WinformUpdateScheduler : IUpdateScheduler
     {
-        private readonly Control _control;
+        private readonly Control _syncControl;
 
-        public WinformsUpdateScheduler(Control control)
+        public WinformUpdateScheduler(Control syncControl)
         {
-            _control = control;
+            _syncControl = syncControl;
         }
 
         public void Schedule(Func<Task> updateAction)
         {
-            // Use BeginInvoke to run the action on the UI thread without blocking.
-            _control.BeginInvoke(new Action(async () => await updateAction()));
-        }
-    }
+            if (_syncControl.IsDisposed || _syncControl.Disposing) return;
 
-    /// <summary>
-    /// Extension method to convert EchoUI.Core.Color to System.Drawing.Color.
-    /// </summary>
-    public static class ColorExtensions
-    {
-        public static System.Drawing.Color ToDrawingColor(this EchoUI.Core.Color color)
-        {
-            return System.Drawing.Color.FromArgb(color.A, color.R, color.G, color.B);
+            try
+            {
+                if (_syncControl.InvokeRequired)
+                {
+                    _syncControl.BeginInvoke(new Action(() => updateAction()));
+                }
+                else
+                {
+                    _ = updateAction.Invoke();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // The form was likely closed during the operation, can be ignored.
+            }
         }
     }
 }

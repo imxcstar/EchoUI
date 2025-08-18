@@ -80,7 +80,7 @@ namespace EchoUI.Render.Web
                 }
             }
 
-            // 为不同类型的元素应用默认样式
+            // [!重要!] 为了保持不同平台的一致性，为不同类型的元素应用默认样式
             switch (newProps)
             {
                 case ContainerProps p:

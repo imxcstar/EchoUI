@@ -1,0 +1,8 @@
+﻿<Directives xmlns="http://schemas.microsoft.com/netfx/2013/01/metadata">
+	<Application>
+		<Assembly Name="EchoUI.Demo.Avalonia" Dynamic="Required All" />
+		<Assembly Name="EchoUI.Demo" Dynamic="Required All" />
+		<Assembly Name="EchoUI.Core" Dynamic="Required All" />
+		<Assembly Name="EchoUI.Render.Avalonia" Dynamic="Required All" />
+	</Application>
+</Directives>

@@ -22,7 +22,7 @@ internal static class Program
             Size = new System.Drawing.Size(760, 800),
         };
 
-        var renderer = new WinformRenderer();
+        var renderer = new WinformRenderer(_mainForm);
         _reconciler = new Reconciler(renderer, _mainForm);
 
         await _reconciler.Mount(Demo.Render);
