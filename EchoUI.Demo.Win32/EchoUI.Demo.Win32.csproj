@@ -4,6 +4,8 @@
 		<TargetFramework>net9.0-windows</TargetFramework>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Nullable>enable</Nullable>
+		<PublishAot>true</PublishAot>
+		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Demo\EchoUI.Demo.csproj" />

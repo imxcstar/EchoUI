@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -253,6 +254,8 @@ namespace EchoUI.Core
 
         #region Props Diffing Logic
 
+        [UnconditionalSuppressMessage("AOT", "IL2067", Justification = "Props 属性类型在 AOT 编译时会被保留")]
+        [UnconditionalSuppressMessage("AOT", "IL2072", Justification = "Props 属性类型在 AOT 编译时会被保留")]
         private PropertyPatch? CreateInitialPatch(Props props)
         {
             var patch = new PropertyPatch { UpdatedProperties = new Dictionary<string, object?>() };
@@ -277,7 +280,8 @@ namespace EchoUI.Core
                 var value = propInfo.GetValue(props);
 
                 // For other properties, add them if they are not the default value.
-                if (value != null && !value.Equals(GetDefaultValue(propInfo.PropertyType)))
+                var defaultValue = propInfo.PropertyType.IsValueType ? Activator.CreateInstance(propInfo.PropertyType) : null;
+                if (value != null && !value.Equals(defaultValue))
                 {
                     patch.UpdatedProperties[propInfo.Name] = value;
                     hasContent = true;
@@ -285,15 +289,6 @@ namespace EchoUI.Core
             }
 
             return hasContent ? patch : null;
-        }
-
-        private object? GetDefaultValue(Type t)
-        {
-            if (t.IsValueType)
-            {
-                return Activator.CreateInstance(t);
-            }
-            return null;
         }
 
         private PropertyPatch? DiffProps(Props oldProps, Props newProps)

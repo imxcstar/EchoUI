@@ -1,4 +1,6 @@
-﻿namespace EchoUI.Core
+using System.Diagnostics.CodeAnalysis;
+
+namespace EchoUI.Core
 {
     [AttributeUsageAttribute(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
     public class ElementAttribute : Attribute
@@ -43,6 +45,7 @@
     /// <summary>
     /// 所有Props的基类
     /// </summary>
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)]
     public record class Props
     {
         /// <summary>
