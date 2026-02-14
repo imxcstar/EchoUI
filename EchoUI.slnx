@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Demo/">
+    <Project Path="EchoUI.Demo.Web/EchoUI.Demo.Web.csproj" />
+    <Project Path="EchoUI.Demo/EchoUI.Demo.csproj" />
+  </Folder>
+  <Folder Name="/EchoUI/">
+    <Project Path="EchoUI.Core/EchoUI.Core.csproj" />
+    <Project Path="EchoUI.Generator/EchoUI.Generator.csproj" />
+    <Project Path="EchoUI.Render.Web/EchoUI.Render.Web.csproj" />
+  </Folder>
+</Solution>
