@@ -187,7 +187,7 @@ namespace EchoUI.Render.Win32
                     // 双缓冲绘制
                     using var bitmap = new Bitmap(w, h);
                     using var g = Graphics.FromImage(bitmap);
-                    GdiPainter.Paint(g, _renderer.RootElement, w, h);
+                    GdiPainter.Paint(g, _renderer.RootElement, _renderer.FloatingElements, w, h);
 
                     using var screenGraphics = Graphics.FromHdc(ps.hdc);
                     screenGraphics.DrawImageUnscaled(bitmap, 0, 0);

@@ -26,6 +26,15 @@ namespace EchoUI.Render.Win32
             LayoutChildren(root, viewportWidth, viewportHeight);
         }
 
+        private static readonly string _layoutLog = Path.Combine(AppContext.BaseDirectory, "layout_debug.log");
+        private static int _layoutLogCount;
+        private static void LayoutLog(string msg)
+        {
+            if (_layoutLogCount > 200) return;
+            _layoutLogCount++;
+            try { File.AppendAllText(_layoutLog, msg + "\n"); } catch { }
+        }
+
         private static void LayoutChildren(Win32Element container, float vpW, float vpH)
         {
             if (container.Children.Count == 0) return;
@@ -226,12 +235,20 @@ namespace EchoUI.Render.Win32
 
                 if (item.IsFloat)
                 {
+                    // Float 元素不占据正常流空间，但自身需要根据内容计算实际尺寸
+                    // 宽度继承父容器内容区宽度
                     child.LayoutWidth = contentWidth;
-                    child.LayoutHeight = 0;
+                    // 高度由内容撑开
+                    child.LayoutHeight = MeasureIntrinsicHeight(child, contentWidth, vpW, vpH);
                     child.LayoutX = padding.Left;
+                    // Float 元素定位在当前 cursor 位置（紧跟上一个正常流元素之后）
                     child.LayoutY = padding.Top + cursor;
                     child.AbsoluteX = container.AbsoluteX + child.LayoutX;
                     child.AbsoluteY = container.AbsoluteY + child.LayoutY;
+                    if (container.ScrollOffsetY != 0)
+                    {
+                        child.AbsoluteY -= container.ScrollOffsetY;
+                    }
                     LayoutChildren(child, vpW, vpH);
                     continue;
                 }

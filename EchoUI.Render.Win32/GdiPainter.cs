@@ -14,17 +14,38 @@ namespace EchoUI.Render.Win32
         /// <summary>
         /// 绘制整棵元素树
         /// </summary>
-        public static void Paint(Graphics g, Win32Element root, float viewportWidth, float viewportHeight)
+        /// <summary>
+        /// 绘制整棵元素树
+        /// </summary>
+        public static void Paint(Graphics g, Win32Element root, IReadOnlyCollection<Win32Element>? floatingElements, float viewportWidth, float viewportHeight)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             g.Clear(System.Drawing.Color.White);
 
-            PaintElement(g, root, new RectangleF(0, 0, viewportWidth, viewportHeight));
+            var viewportRect = new RectangleF(0, 0, viewportWidth, viewportHeight);
+
+            // 第一遍：绘制非 Float 元素
+            PaintElement(g, root, viewportRect, floatingElements);
+
+            // 第二遍：绘制 Float 元素（作为顶层覆盖）
+            if (floatingElements != null)
+            {
+                foreach (var floatElem in floatingElements)
+                {
+                    // Float 元素通常不受父级 overflow 裁剪（除非我们想那样），
+                    // 这里我们只裁剪到视口
+                    PaintElement(g, floatElem, viewportRect, null);
+                }
+            }
         }
 
-        private static void PaintElement(Graphics g, Win32Element element, RectangleF clipRect)
+        private static void PaintElement(Graphics g, Win32Element element, RectangleF clipRect, IReadOnlyCollection<Win32Element>? skippedElements)
         {
+            // 如果该元素在待会要画的 Float 列表里，这一遍先跳过
+            if (skippedElements != null && skippedElements.Contains(element))
+                return;
+
             var bounds = element.GetAbsoluteBounds();
 
             // 如果元素完全在裁剪区域外，跳过
@@ -37,7 +58,7 @@ namespace EchoUI.Render.Win32
             switch (element.ElementType)
             {
                 case ElementCoreName.Container:
-                    PaintContainer(g, element, bounds, clipRect);
+                    PaintContainer(g, element, bounds, clipRect, skippedElements);
                     break;
                 case ElementCoreName.Text:
                     PaintText(g, element, bounds, clipRect);
@@ -48,12 +69,12 @@ namespace EchoUI.Render.Win32
                     break;
                 default:
                     // 未知类型当作容器处理
-                    PaintContainer(g, element, bounds, clipRect);
+                    PaintContainer(g, element, bounds, clipRect, skippedElements);
                     break;
             }
         }
 
-        private static void PaintContainer(Graphics g, Win32Element element, RectangleF bounds, RectangleF clipRect)
+        private static void PaintContainer(Graphics g, Win32Element element, RectangleF bounds, RectangleF clipRect, IReadOnlyCollection<Win32Element>? skippedElements)
         {
             if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
@@ -126,7 +147,7 @@ namespace EchoUI.Render.Win32
             // 绘制子元素
             foreach (var child in element.Children)
             {
-                PaintElement(g, child, childClip);
+                PaintElement(g, child, childClip, skippedElements);
             }
 
             if (savedState != null)

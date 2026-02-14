@@ -13,10 +13,21 @@ namespace EchoUI.Render.Win32
         private Win32Element? _pressedElement;
         private Win32Element? _focusedElement;
         private readonly Win32Renderer _renderer;
+        private static readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "hittest_debug.log");
+        private static int _logCount;
 
         public HitTestManager(Win32Renderer renderer)
         {
             _renderer = renderer;
+            // 清空旧日志
+            try { File.WriteAllText(_logPath, ""); } catch { }
+        }
+
+        private static void Log(string msg)
+        {
+            if (_logCount > 500) return; // 限制日志量
+            _logCount++;
+            try { File.AppendAllText(_logPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); } catch { }
         }
 
         /// <summary>
@@ -24,6 +35,41 @@ namespace EchoUI.Render.Win32
         /// </summary>
         public Win32Element? HitTest(Win32Element root, float x, float y)
         {
+            // 1. 优先检查全局 Float 层（倒序，最新的在最上层）
+            var floats = _renderer.FloatingElements;
+            if (floats != null)
+            {
+                for (int i = floats.Count - 1; i >= 0; i--)
+                {
+                    // 注意：这里的 HitTestRecursive 内部也会检查它自己的 Float 子元素
+                    // 但由于我们将所有 Float 元素都收集到了 FloatingElements，
+                    // 其实这里只需检查 floats[i] 自身及其非 Float 子元素即可。
+                    // 不过为了简单，复用 HitTestRecursive 也没问题，
+                    // 因为嵌套的 Float 元素虽然也在 FloatingElements 列表里（如果被递归收集的话），
+                    // 但我们的收集逻辑是 "遇到 Float 则停止递归 collecting children"，
+                    // 所以 FloatingElements 只包含 "Root Floats"。
+                    // 它可以包含嵌套的 Float 吗？看收集逻辑。
+                    // 收集逻辑：if (child.Float) { add; } else { recurse; }
+                    // 所以 FloatingElements 包含的是最外层的 Float 元素。
+                    // 它们的内部 Float 元素没有被收集到顶层列表，而是保留在子树中。
+                    // 所以 HitTestRecursive(floats[i]) 会正确处理内部结构。
+                    
+                    var hit = HitTestRecursive(floats[i], x, y);
+                    if (hit != null) return hit;
+                }
+            }
+
+            // 2. 检查常规树
+            // 注意：如果鼠标在 Float 元素上，上面的循环应该已经返回了。
+            // 但如果在常规树遍历中再次遇到了该 Float 元素（因为它是某个节点的 Child），
+            // HitTestRecursive 会再次检查它。
+            // 这虽然有重复，但如果是 "Return null check" (Line 49 in HitTestRecursive)，
+            // 或者是正常的命中测试，结果应该一致。
+            // 唯一的问题是：如果 Float 元素遮挡了后面的常规元素，
+            // 这里的 step 1 已经捕获了。
+            // 如果 Float 元素被后面的常规元素遮挡（通常不应该，Float 应在顶层），
+            // 这里的 step 1 也会优先捕获，实现了 "TopMost" 效果。
+            
             return HitTestRecursive(root, x, y);
         }
 
@@ -31,35 +77,49 @@ namespace EchoUI.Render.Win32
         {
             var bounds = element.GetAbsoluteBounds();
 
-            // 检查是否在元素边界内
-            if (x < bounds.X || x > bounds.Right || y < bounds.Y || y > bounds.Bottom)
-                return null;
+            // Float 元素可能超出父容器边界，需要特殊处理
+            bool isInBounds = x >= bounds.X && x <= bounds.Right && y >= bounds.Y && y <= bounds.Bottom;
 
             // 如果元素有 Overflow 裁剪，超出部分不可点击
-            if (element.Overflow != Overflow.Visible)
-            {
-                if (x < bounds.X || x > bounds.Right || y < bounds.Y || y > bounds.Bottom)
-                    return null;
-            }
+            if (!isInBounds && element.Overflow != Overflow.Visible)
+                return null;
 
-            // 从后往前遍历子元素（后绘制的在上层）
+            // 先检查 Float 子元素（它们在最上层，可能超出父容器边界）
             for (int i = element.Children.Count - 1; i >= 0; i--)
             {
                 var child = element.Children[i];
-
-                // Text 元素如果 MouseThrough 为 true，跳过命中测试
-                if (child.ElementType == ElementCoreName.Text && child.MouseThrough)
-                    continue;
+                if (!child.Float) continue;
 
                 var hit = HitTestRecursive(child, x, y);
                 if (hit != null) return hit;
             }
 
-            // 如果没有子元素命中，返回当前元素（如果它有事件处理器）
+            // 非 Float 子元素需要在父容器边界内
+            if (!isInBounds)
+                return null;
+
+            // 从后往前遍历非 Float 子元素
+            for (int i = element.Children.Count - 1; i >= 0; i--)
+            {
+                var child = element.Children[i];
+                if (child.Float) continue;
+
+                if (child.ElementType == ElementCoreName.Text && child.MouseThrough)
+                    continue;
+
+                // 调试：记录有 OnClick 的子元素的布局
+                if (child.OnClick != null)
+                {
+                    Log($"  HitTest child[{i}] type={child.ElementType}, bounds={child.GetAbsoluteBounds()}, hasClick=true, mouse=({x},{y})");
+                }
+
+                var hit = HitTestRecursive(child, x, y);
+                if (hit != null) return hit;
+            }
+
             if (HasEventHandler(element))
                 return element;
 
-            // 容器本身也可以被命中（用于接收事件）
             if (element.ElementType == ElementCoreName.Container)
                 return element;
 
@@ -102,10 +162,12 @@ namespace EchoUI.Render.Win32
                 _renderer.RequestRepaint();
             }
 
-            // 触发 MouseMove
-            if (hit?.OnMouseMove != null)
+            // 向上冒泡查找有 OnMouseMove 的元素
+            var moveTarget = FindHandler(hit, e => e.OnMouseMove != null);
+            if (moveTarget != null)
             {
-                hit.OnMouseMove(new Core.Point((int)x, (int)y));
+                Log($"MouseMove at ({x},{y}), hit={hit?.ElementType}, hitBounds={hit?.GetAbsoluteBounds()}, moveTarget={moveTarget.ElementType}, moveTargetBounds={moveTarget.GetAbsoluteBounds()}");
+                moveTarget.OnMouseMove?.Invoke(new Core.Point((int)x, (int)y));
             }
         }
 
@@ -119,9 +181,10 @@ namespace EchoUI.Render.Win32
 
             if (hit != null)
             {
-                // 设置焦点
+                Log($"MouseDown at ({x},{y}), hit={hit.ElementType}, hitBounds={hit.GetAbsoluteBounds()}, hasClick={hit.OnClick != null}");
                 _focusedElement = hit;
-                hit.OnMouseDown?.Invoke();
+                var downTarget = FindHandler(hit, e => e.OnMouseDown != null);
+                downTarget?.OnMouseDown?.Invoke();
                 _renderer.RequestRepaint();
             }
         }
@@ -135,13 +198,14 @@ namespace EchoUI.Render.Win32
 
             if (hit != null)
             {
-                hit.OnMouseUp?.Invoke();
+                var upTarget = FindHandler(hit, e => e.OnMouseUp != null);
+                upTarget?.OnMouseUp?.Invoke();
 
-                // 如果按下和释放在同一个元素上，触发 Click
-                if (hit == _pressedElement || IsAncestorOf(_pressedElement, hit))
+                // 如果按下和释放在同一个元素上（或其祖先），触发 Click
+                if (hit == _pressedElement || IsAncestorOf(_pressedElement, hit) || IsAncestorOf(hit, _pressedElement))
                 {
-                    // 向上冒泡查找有 OnClick 的元素
-                    var clickTarget = FindClickTarget(hit);
+                    var clickTarget = FindHandler(hit, e => e.OnClick != null);
+                    Log($"MouseUp at ({x},{y}), hit={hit.ElementType}, hitBounds={hit.GetAbsoluteBounds()}, hasClick={hit.OnClick != null}, clickTarget={clickTarget?.ElementType}, clickTargetHasClick={clickTarget?.OnClick != null}, pressed={_pressedElement?.ElementType}");
                     clickTarget?.OnClick?.Invoke(button);
                 }
 
@@ -236,12 +300,15 @@ namespace EchoUI.Render.Win32
             }
         }
 
-        private static Win32Element? FindClickTarget(Win32Element? element)
+        /// <summary>
+        /// 向上冒泡查找满足条件的元素
+        /// </summary>
+        private static Win32Element? FindHandler(Win32Element? element, Func<Win32Element, bool> predicate)
         {
             var current = element;
             while (current != null)
             {
-                if (current.OnClick != null) return current;
+                if (predicate(current)) return current;
                 current = current.Parent;
             }
             return null;

@@ -14,6 +14,9 @@ namespace EchoUI.Render.Win32
         private Win32Element? _rootElement;
         private Win32UpdateScheduler? _scheduler;
         private HitTestManager? _hitTestManager;
+        private readonly List<Win32Element> _floatingElements = [];
+
+        internal IReadOnlyList<Win32Element> FloatingElements => _floatingElements;
 
         /// <summary>
         /// 所有 Input 元素的 Edit HWND → Win32Element 映射
@@ -425,9 +428,41 @@ namespace EchoUI.Render.Win32
             {
                 FlexLayout.ComputeLayout(_rootElement, vpW, vpH);
                 UpdateEditPositions(_rootElement);
+                CollectFloatingElements();
             }
 
             NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
+        }
+
+        private void CollectFloatingElements()
+        {
+            _floatingElements.Clear();
+            if (_rootElement == null) return;
+            CollectFloatingElementsRecursive(_rootElement);
+        }
+
+        private void CollectFloatingElementsRecursive(Win32Element element)
+        {
+            foreach (var child in element.Children)
+            {
+                if (child.Float)
+                {
+                    _floatingElements.Add(child);
+                    // 如果它是 Float 元素，我们把它作为独立的层。
+                    // 它的子元素如果也是 Float，通常是相对于它的（如下级菜单），
+                    // 所以我们暂时不把嵌套的 Float 提升到顶层，而是跟随这个 Float 元素。
+                    // 但这里策略是：只要是 Float，就收集？
+                    // 如果 A(Float) -> B(Float)，B 是 A 的子元素。
+                    // 如果 Paint(A) 会 Paint(B)。
+                    // 如果我们收集了 A，GdiPainter 会 Paint(A)。
+                    // 此时我们不应该再收集 B，否则 B 会被画两次（一次在 A 内部，一次作为 Top Layer）。
+                    // 所以：一旦遇到 Float，加入列表，并且不再遍历其子元素寻找 Float。
+                }
+                else
+                {
+                    CollectFloatingElementsRecursive(child);
+                }
+            }
         }
 
         /// <summary>
