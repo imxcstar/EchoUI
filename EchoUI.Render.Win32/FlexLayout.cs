@@ -26,15 +26,6 @@ namespace EchoUI.Render.Win32
             LayoutChildren(root, viewportWidth, viewportHeight);
         }
 
-        private static readonly string _layoutLog = Path.Combine(AppContext.BaseDirectory, "layout_debug.log");
-        private static int _layoutLogCount;
-        private static void LayoutLog(string msg)
-        {
-            if (_layoutLogCount > 200) return;
-            _layoutLogCount++;
-            try { File.AppendAllText(_layoutLog, msg + "\n"); } catch { }
-        }
-
         private static void LayoutChildren(Win32Element container, float vpW, float vpH)
         {
             if (container.Children.Count == 0) return;
