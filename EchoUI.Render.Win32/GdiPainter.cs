@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Runtime.InteropServices;
 using EchoUI.Core;
 
 namespace EchoUI.Render.Win32
@@ -213,10 +214,44 @@ namespace EchoUI.Render.Win32
             // Input 的背景和边框由渲染器绘制，内容由原生 Edit 控件绘制
             if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
+            // 绘制背景
             if (element.BackgroundColor.HasValue)
             {
                 using var brush = new SolidBrush(ToGdiColor(element.BackgroundColor.Value));
-                g.FillRectangle(brush, bounds);
+                
+                if (element.BorderRadius > 0)
+                {
+                    using var path = CreateRoundedRect(bounds, element.BorderRadius);
+                    g.FillPath(brush, path);
+                }
+                else
+                {
+                    g.FillRectangle(brush, bounds);
+                }
+            }
+
+            // 绘制边框
+            if (element.BorderWidth > 0 && element.BorderStyle != Core.BorderStyle.None && element.BorderColor.HasValue)
+            {
+                var borderColor = ToGdiColor(element.BorderColor.Value);
+                var dashStyle = element.BorderStyle switch
+                {
+                    Core.BorderStyle.Dashed => System.Drawing.Drawing2D.DashStyle.Dash,
+                    Core.BorderStyle.Dotted => System.Drawing.Drawing2D.DashStyle.Dot,
+                    _ => System.Drawing.Drawing2D.DashStyle.Solid
+                };
+
+                using var pen = new Pen(borderColor, element.BorderWidth) { DashStyle = dashStyle };
+
+                if (element.BorderRadius > 0)
+                {
+                    using var path = CreateRoundedRect(bounds, element.BorderRadius);
+                    g.DrawPath(pen, path);
+                }
+                else
+                {
+                    g.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width, bounds.Height);
+                }
             }
         }
 

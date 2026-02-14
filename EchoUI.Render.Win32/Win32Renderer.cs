@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Drawing;
 using EchoUI.Core;
 
 namespace EchoUI.Render.Win32
@@ -352,6 +353,7 @@ namespace EchoUI.Render.Win32
             {
                 element.EditHwnd = hwnd;
                 _editElements[hwnd] = element;
+                SyncEditControl(element);
             }
         }
 
@@ -359,7 +361,7 @@ namespace EchoUI.Render.Win32
         {
             if (element.EditHwnd == 0) return;
 
-            // 同步文本值
+            // --- 同步文本值 ---
             if (element.InputValue != null)
             {
                 int len = NativeInterop.GetWindowTextLength(element.EditHwnd);
@@ -374,6 +376,41 @@ namespace EchoUI.Render.Win32
                     _suppressEditNotification = false;
                 }
             }
+            
+            // --- 同步字体 ---
+            // 简单起见，每次只要属性可能变了就重建字体 (GDI 资源要注意释放)
+            // 这里为了简化逻辑，我们先释放旧的
+            if (element.NativeFontHandle != 0)
+            {
+                NativeInterop.DeleteObject(element.NativeFontHandle);
+                element.NativeFontHandle = 0;
+            }
+            
+            var fontStyle = FontStyle.Regular;
+            if (element.FontWeight != null && (element.FontWeight == "bold" || element.FontWeight == "700"))
+                fontStyle = FontStyle.Bold;
+
+            using (var font = new Font(element.FontFamily ?? "Segoe UI", element.FontSize > 0 ? element.FontSize : 14, fontStyle, GraphicsUnit.Pixel))
+            {
+                element.NativeFontHandle = font.ToHfont();
+                NativeInterop.SendMessage(element.EditHwnd, NativeInterop.WM_SETFONT, element.NativeFontHandle, 1);
+            }
+
+            // --- 同步背景刷 (用于 WM_CTLCOLOREDIT) ---
+            if (element.NativeBrushHandle != 0)
+            {
+                NativeInterop.DeleteObject(element.NativeBrushHandle);
+                element.NativeBrushHandle = 0;
+            }
+            // 如果透明背景或者默认，通常用白色，这里我们用 BackgroundColor
+            var bgColor = element.BackgroundColor ?? Core.Color.Transparent; // 如果没有背景色，Input 默认可能透或者是白？通常 Input 是白的
+            if (!element.BackgroundColor.HasValue) bgColor = new Core.Color(255, 255, 255, 255);
+            
+            int colorRef = (bgColor.B << 16) | (bgColor.G << 8) | bgColor.R;
+            element.NativeBrushHandle = NativeInterop.CreateSolidBrush(colorRef);
+
+            // 触发重绘以应用颜色
+            NativeInterop.InvalidateRect(element.EditHwnd, 0, true);
         }
 
         /// <summary>
@@ -400,6 +437,19 @@ namespace EchoUI.Render.Win32
             if (element.EditHwnd != 0)
             {
                 _editElements.Remove(element.EditHwnd);
+
+                // 清理 GDI 资源
+                if (element.NativeFontHandle != 0)
+                {
+                    NativeInterop.DeleteObject(element.NativeFontHandle);
+                    element.NativeFontHandle = 0;
+                }
+                if (element.NativeBrushHandle != 0)
+                {
+                    NativeInterop.DeleteObject(element.NativeBrushHandle);
+                    element.NativeBrushHandle = 0;
+                }
+
                 if (NativeInterop.IsWindow(element.EditHwnd))
                     NativeInterop.DestroyWindow(element.EditHwnd);
                 element.EditHwnd = 0;
@@ -427,7 +477,7 @@ namespace EchoUI.Render.Win32
             if (vpW > 0 && vpH > 0)
             {
                 FlexLayout.ComputeLayout(_rootElement, vpW, vpH);
-                UpdateEditPositions(_rootElement);
+                UpdateEditPositions(_rootElement, vpW, vpH);
                 CollectFloatingElements();
             }
 
@@ -477,32 +527,74 @@ namespace EchoUI.Render.Win32
         /// <summary>
         /// 更新所有 Edit 控件的位置以匹配布局结果（公开方法供 Win32Window 调用）
         /// </summary>
-        public void UpdateAllEditPositions()
+        public void UpdateAllEditPositions(float vpW, float vpH)
         {
             if (_rootElement != null)
-                UpdateEditPositions(_rootElement);
+                UpdateEditPositions(_rootElement, vpW, vpH);
         }
 
         /// <summary>
         /// 更新所有 Edit 控件的位置以匹配布局结果
         /// </summary>
-        private void UpdateEditPositions(Win32Element element)
+        private void UpdateEditPositions(Win32Element element, float vpW, float vpH)
         {
             if (element.EditHwnd != 0)
             {
+                // 计算内容区域（减去 Padding 和 Border）
+                var padding = ResolvePadding(element.Padding, element.LayoutWidth, vpW, vpH);
+                float border = element.BorderWidth;
+                
+                int x = (int)(element.AbsoluteX + padding.Left + border);
+                int y = (int)(element.AbsoluteY + padding.Top + border);
+                int w = (int)(element.LayoutWidth - padding.Left - padding.Right - border * 2);
+                int h = (int)(element.LayoutHeight - padding.Top - padding.Bottom - border * 2);
+                
+                if (w < 0) w = 0;
+                if (h < 0) h = 0;
+
                 NativeInterop.MoveWindow(
                     element.EditHwnd,
-                    (int)element.AbsoluteX,
-                    (int)element.AbsoluteY,
-                    (int)element.LayoutWidth,
-                    (int)element.LayoutHeight,
+                    x,
+                    y,
+                    w,
+                    h,
                     true);
             }
 
             foreach (var child in element.Children)
             {
-                UpdateEditPositions(child);
+                UpdateEditPositions(child, vpW, vpH);
             }
+        }
+
+        private (float Left, float Top, float Right, float Bottom) ResolvePadding(Spacing? padding, float width, float vpW, float vpH)
+        {
+            if (padding == null) return (0, 0, 0, 0);
+            return (
+                ResolveDimension(padding.Value.Left, width, vpW, vpH),
+                ResolveDimension(padding.Value.Top, width, vpW, vpH),
+                ResolveDimension(padding.Value.Right, width, vpW, vpH),
+                ResolveDimension(padding.Value.Bottom, width, vpW, vpH)
+            );
+        }
+
+        private float ResolveDimension(Dimension? d, float parentSize, float vpW, float vpH)
+        {
+            if (d == null) return 0;
+            return d.Value.Unit switch
+            {
+                DimensionUnit.Pixels => d.Value.Value,
+                DimensionUnit.Percent => parentSize * d.Value.Value / 100f,
+                DimensionUnit.ViewportHeight => vpH * d.Value.Value / 100f,
+                _ => 0
+            };
+        }
+
+
+        internal Win32Element? GetElementByEditHwnd(nint hwnd)
+        {
+            _editElements.TryGetValue(hwnd, out var element);
+            return element;
         }
     }
 }

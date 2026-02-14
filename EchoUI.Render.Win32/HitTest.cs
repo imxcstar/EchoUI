@@ -13,7 +13,7 @@ namespace EchoUI.Render.Win32
         private Win32Element? _pressedElement;
         private Win32Element? _focusedElement;
         private readonly Win32Renderer _renderer;
-        private static int _logCount;
+
 
         public HitTestManager(Win32Renderer renderer)
         {

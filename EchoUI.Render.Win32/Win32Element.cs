@@ -76,6 +76,8 @@ namespace EchoUI.Render.Win32
         // --- Input 属性 ---
         public string? InputValue { get; set; }
         public nint EditHwnd { get; set; }
+        public nint NativeFontHandle { get; set; }
+        public nint NativeBrushHandle { get; set; }
 
         // --- 事件处理器 ---
         public Action<MouseButton>? OnClick { get; set; }

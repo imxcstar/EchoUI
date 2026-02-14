@@ -164,6 +164,33 @@ namespace EchoUI.Render.Win32
                 case NativeInterop.WM_DESTROY:
                     NativeInterop.PostQuitMessage(0);
                     return 0;
+
+                case NativeInterop.WM_CTLCOLOREDIT:
+                    if (_renderer != null)
+                    {
+                        var element = _renderer.GetElementByEditHwnd(lParam);
+                        if (element != null)
+                        {
+                            var hdc = wParam;
+                            
+                            // 设置文本颜色
+                            var textColor = element.TextColor ?? EchoUI.Core.Color.Black;
+                            int crText = (textColor.B << 16) | (textColor.G << 8) | textColor.R;
+                            NativeInterop.SetTextColor(hdc, crText);
+
+                            // 设置背景颜色（用于文字底色）
+                            var bgColor = element.BackgroundColor ?? new EchoUI.Core.Color(255, 255, 255, 255);
+                            int crBk = (bgColor.B << 16) | (bgColor.G << 8) | bgColor.R;
+                            NativeInterop.SetBkColor(hdc, crBk); // 需要 SetBkColor
+                            
+                            // 返回背景画刷，用于擦除背景
+                            if (element.NativeBrushHandle != 0)
+                                return element.NativeBrushHandle;
+                            
+                            return NativeInterop.GetStockObject(NativeInterop.WHITE_BRUSH);
+                        }
+                    }
+                    break;
             }
 
             return NativeInterop.DefWindowProc(hWnd, msg, wParam, lParam);
@@ -182,7 +209,7 @@ namespace EchoUI.Render.Win32
                 {
                     // 确保布局已计算
                     FlexLayout.ComputeLayout(_renderer.RootElement, w, h);
-                    _renderer.UpdateAllEditPositions();
+                    _renderer.UpdateAllEditPositions(w, h);
 
                     // 双缓冲绘制
                     using var bitmap = new Bitmap(w, h);

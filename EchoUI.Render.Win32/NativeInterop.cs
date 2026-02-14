@@ -37,6 +37,8 @@ namespace EchoUI.Render.Win32
 
         // --- Edit 控件通知 ---
         public const int EN_CHANGE = 0x0300;
+        public const uint WM_CTLCOLOREDIT = 0x0133;
+        public const uint WM_SETFONT = 0x0030;
 
         // --- 窗口样式 ---
         public const uint WS_OVERLAPPEDWINDOW = 0x00CF0000;
@@ -240,5 +242,24 @@ namespace EchoUI.Render.Win32
         public static extern nint GetStockObject(int fnObject);
 
         public const int WHITE_BRUSH = 0;
+        public const int TRANSPARENT = 1;
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern nint SendMessage(nint hWnd, uint Msg, nint wParam, nint lParam);
+
+        [DllImport("gdi32.dll")]
+        public static extern int SetBkMode(nint hdc, int iBkMode);
+
+        [DllImport("gdi32.dll")]
+        public static extern uint SetBkColor(nint hdc, int crColor);
+
+        [DllImport("gdi32.dll")]
+        public static extern uint SetTextColor(nint hdc, int crColor);
+
+        [DllImport("gdi32.dll")]
+        public static extern nint CreateSolidBrush(int crColor);
+
+        [DllImport("gdi32.dll")]
+        public static extern bool DeleteObject(nint hObject);
     }
 }
