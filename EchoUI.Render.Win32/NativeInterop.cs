@@ -162,16 +162,16 @@ namespace EchoUI.Render.Win32
         [DllImport("user32.dll")]
         public static extern bool UpdateWindow(nint hWnd);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern bool GetMessage(out MSG lpMsg, nint hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern bool TranslateMessage(ref MSG lpMsg);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern nint DispatchMessage(ref MSG lpMsg);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern nint DefWindowProc(nint hWnd, uint msg, nint wParam, nint lParam);
 
         [DllImport("user32.dll")]
