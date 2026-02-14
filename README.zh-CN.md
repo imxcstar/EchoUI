@@ -19,6 +19,7 @@
 - **多后端渲染** — 支持浏览器 DOM（Blazor WASM）和原生 Win32 窗口（GDI+）
 - **内置元素** — Button、Input、CheckBox、ComboBox、RadioGroup、Switch、Tabs
 - **Flexbox 布局** — 基于容器的布局，支持方向、对齐、间距、弹性伸缩
+- **支持 AOT** — Win32 后端支持 Native AOT 发布，启动快、体积小
 
 ## 快速开始
 

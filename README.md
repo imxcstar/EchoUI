@@ -19,6 +19,7 @@ A React-inspired declarative UI framework for .NET 9.0. Virtual DOM reconciler w
 - **Multi-Backend** — Render to browser DOM (Blazor WASM) or native Win32 windows (GDI+)
 - **Built-in Elements** — Button, Input, CheckBox, ComboBox, RadioGroup, Switch, Tabs
 - **Flexbox Layout** — Container-based layout with direction, justify, align, gap, flex-grow/shrink
+- **AOT Ready** — Win32 backend supports Native AOT publishing for fast startup and minimal footprint
 
 ## Quick Start
 
