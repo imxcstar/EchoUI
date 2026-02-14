@@ -95,8 +95,8 @@ namespace EchoUI.Render.Web
                         domPatch.Styles["overflow"] = "visible";
                         domPatch.Styles["z-index"] = "1000";
                     }
-                    domPatch.Styles["flex-shrink"] = "0";
-                    domPatch.Styles["flex-grow"] = "0";
+                    domPatch.Styles["flex-shrink"] = p.FlexShrink.HasValue ? p.FlexShrink.Value.ToString() : "0";
+                    domPatch.Styles["flex-grow"] = p.FlexGrow.HasValue ? p.FlexGrow.Value.ToString() : "0";
                     break;
                 case TextProps:
                     domPatch.Styles ??= new();
@@ -165,6 +165,8 @@ namespace EchoUI.Render.Web
                         case nameof(ContainerProps.JustifyContent): domPatch.SetStyle("justify-content", ToCss(propValue as JustifyContent?)); break;
                         case nameof(ContainerProps.AlignItems): domPatch.SetStyle("align-items", (propValue as AlignItems?)?.ToString().ToLower()); break;
                         case nameof(ContainerProps.Gap): domPatch.SetStyle("gap", propValue != null ? $"{propValue}px" : null); break;
+                        case nameof(ContainerProps.FlexGrow): domPatch.SetStyle("flex-grow", propValue != null ? propValue.ToString() : null); break;
+                        case nameof(ContainerProps.FlexShrink): domPatch.SetStyle("flex-shrink", propValue != null ? propValue.ToString() : null); break;
 
                         // --- Appearance ---
                         case nameof(ContainerProps.BackgroundColor): domPatch.SetStyle("background-color", ToCss(propValue as Color?)); break;
@@ -235,7 +237,7 @@ namespace EchoUI.Render.Web
         }
 
         #region CSS/DOM Converters
-        private string? ToCss(Dimension? dim) => dim.HasValue ? dim.Value.Unit switch { DimensionUnit.Pixels => $"{dim.Value.Value}px", DimensionUnit.Percent => $"{dim.Value.Value}%", _ => "" } : null;
+        private string? ToCss(Dimension? dim) => dim.HasValue ? dim.Value.Unit switch { DimensionUnit.Pixels => $"{dim.Value.Value}px", DimensionUnit.Percent => $"{dim.Value.Value}%", DimensionUnit.ViewportHeight => $"{dim.Value.Value}vh", _ => "" } : null;
         private string? ToCss(Color? color) => color.HasValue ? $"rgba({color.Value.R},{color.Value.G},{color.Value.B},{(float)color.Value.A / 255})" : null;
         private string? ToCss(JustifyContent? jc) => jc switch { JustifyContent.SpaceAround => "space-around", JustifyContent.SpaceBetween => "space-between", _ => jc?.ToString().ToLower() };
         private string? ToCss(Overflow? overflow) => overflow?.ToString().ToLower();

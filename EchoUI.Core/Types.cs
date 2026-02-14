@@ -55,12 +55,13 @@ namespace EchoUI.Core
         /// 创建一个以百分比为单位的尺寸。
         /// </summary>
         public static Dimension Percent(float value) => new(value, DimensionUnit.Percent);
+        public static Dimension ViewportHeight(float value) => new(value, DimensionUnit.ViewportHeight);
     }
 
     /// <summary>
     /// 尺寸单位的枚举。
     /// </summary>
-    public enum DimensionUnit { Pixels, Percent }
+    public enum DimensionUnit { Pixels, Percent, ViewportHeight }
 
     /// <summary>
     /// 内容溢出处理方式。

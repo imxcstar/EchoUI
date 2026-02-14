@@ -36,40 +36,7 @@ public static Element App() {
 
     public static Element? Render(Props props)
     {
-        var tabsContent = Memo(() => new List<Element>
-        {
-            Create(Counter, new()
-            {
-                Key = "Counter",
-            }),
-            Create(InputTest, new()
-            {
-                Key = "Input",
-            }),
-            Create(ImageTest, new()
-            {
-                Key = "Image",
-            }),
-            Create(Markdown, new()
-            {
-                Key = "Markdown",
-            }),
-            Create(OtherTest, new()
-            {
-                Key = "Other",
-            }),
-        }, []);
-
-        return Container(
-            Width: Dimension.Percent(100),
-            Height: Dimension.Percent(100),
-            Children: [
-                Tabs(
-                    Titles : ["Counter", "Input", "Image", "Markdown", "Other"],
-                    Content : i => tabsContent[i]
-                )
-            ]
-        );
+        return Dashboard.Create(props);
     }
 
     public static Element? Markdown(Props props)

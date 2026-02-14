@@ -142,6 +142,14 @@ namespace EchoUI.Core
         /// </summary>
         public AlignItems? AlignItems { get; init; }
         /// <summary>
+        /// 子元素在主轴上的放大比例。
+        /// </summary>
+        public float? FlexGrow { get; init; }
+        /// <summary>
+        /// 子元素在主轴上的缩小比例。
+        /// </summary>
+        public float? FlexShrink { get; init; }
+        /// <summary>
         /// 子元素之间的间距。
         /// </summary>
         public float? Gap { get; init; }

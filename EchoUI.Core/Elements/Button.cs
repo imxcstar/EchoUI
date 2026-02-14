@@ -20,6 +20,7 @@ namespace EchoUI.Core
         public Color? PressedColor { get; init; }
         public Color? TextColor { get; init; }
         public Spacing? Padding { get; init; }
+        public float? BorderRadius { get; init; }
     }
 
     public partial class Elements
@@ -52,6 +53,7 @@ namespace EchoUI.Core
                 AlignItems = AlignItems.Center,
                 Padding = props.Padding ?? new Spacing(Dimension.Pixels(8), Dimension.Pixels(4)),
                 BackgroundColor = currentBgColor,
+                BorderRadius = props.BorderRadius ?? 4,
                 OnMouseEnter = () => setIsHovered(true),
                 OnMouseLeave = () =>
                 {
