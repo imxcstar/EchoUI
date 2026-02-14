@@ -202,6 +202,7 @@ namespace EchoUI.Render.Web
                         case nameof(TextProps.Text): domPatch.SetAttribute("textContent", propValue); break;
                         case nameof(TextProps.FontFamily): domPatch.SetStyle("font-family", propValue as string); break;
                         case nameof(TextProps.FontSize): domPatch.SetStyle("font-size", propValue != null ? $"{propValue}px" : null); break;
+                        case nameof(TextProps.FontWeight): domPatch.SetStyle("font-weight", propValue as string); break;
                         case nameof(TextProps.Color): domPatch.SetStyle("color", ToCss(propValue as Color?)); break;
                         case nameof(TextProps.MouseThrough): domPatch.SetStyle("pointer-events", (bool?)propValue == true ? "none" : "auto"); break;
                         default:

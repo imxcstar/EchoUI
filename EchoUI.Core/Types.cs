@@ -15,6 +15,7 @@ namespace EchoUI.Core
         public static Color Gray => new(128, 128, 128);
         public static Color LightGray => new(211, 211, 211);
         public static Color Gainsboro => new(220, 220, 220);
+        public static Color Transparent => new(0, 0, 0, 0);
 
         public static Color FromHex(string hex)
         {
@@ -35,6 +36,10 @@ namespace EchoUI.Core
                 b,
                 255
             );
+        }
+        public Color WithAlpha(byte alpha)
+        {
+            return new Color(R, G, B, alpha);
         }
     }
 

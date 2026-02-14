@@ -20,9 +20,9 @@ namespace EchoUI.Core
     {
         // --- 布局 (尺寸与外边距) ---
         /// <summary>
-        /// 元素的宽度。
+        /// 元素的宽度。默认为 null (自动)。
         /// </summary>
-        public Dimension? Width { get; init; } = Dimension.Percent(100);
+        public Dimension? Width { get; init; }
         /// <summary>
         /// 元素的高度。
         /// </summary>
@@ -180,6 +180,10 @@ namespace EchoUI.Core
         /// 文本的颜色。
         /// </summary>
         public Color? Color { get; init; }
+        /// <summary>
+        /// 字体粗细。
+        /// </summary>
+        public string? FontWeight { get; init; }
         /// <summary>
         /// 设置为 true 时，该文本将不会拦截鼠标事件，事件会"穿透"到下层控件。
         /// </summary>
