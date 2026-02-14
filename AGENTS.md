@@ -5,7 +5,7 @@
 EchoUI is a React-inspired declarative UI framework for .NET 9.0 written in C#. It features a
 custom virtual DOM reconciler with diffing, a hooks system (State, Effect, Memo, Shared), and a
 Roslyn incremental source generator (`IIncrementalGenerator`) that expands `[Element]`-annotated
-methods into overloads with named parameters. The rendering backend is Blazor WebAssembly.
+methods into overloads with named parameters. Rendering backends: Blazor WebAssembly and Win32 GDI+.
 
 ## Solution Structure
 
@@ -13,141 +13,131 @@ methods into overloads with named parameters. The rendering backend is Blazor We
 EchoUI.slnx
 ├── EchoUI.Core/                  # Core framework: Element, Props, Hooks, Reconciler, Types
 │   └── Elements/                 # Built-in composite elements (Button, Input, Tabs, etc.)
-├── EchoUI.Core.Abstractions/    # Unused — not in .slnx or referenced by any project
+├── EchoUI.Core.Abstractions/    # Dead code — not in .slnx, not referenced by any project
 ├── EchoUI.Generator/             # Roslyn incremental source generator (netstandard2.0)
 ├── EchoUI.Render.Web/            # Blazor WASM renderer (JSImport/JSExport)
+├── EchoUI.Render.Win32/          # Win32 GDI+ renderer (net9.0-windows, self-drawing)
 ├── EchoUI.Demo/                  # Shared demo components (App.cs, Dashboard.cs, MarkdownRenderer.cs)
-└── EchoUI.Demo.Web/              # Web demo host (Blazor WASM)
+├── EchoUI.Demo.Web/              # Web demo host (Blazor WASM)
+└── EchoUI.Demo.Win32/            # Win32 demo host (WinExe, PublishAot)
 ```
 
-Note: `EchoUI.Core.Abstractions` contains a duplicate `ElementAttribute` but is dead code. The
-actual `[Element]` attribute used by the generator is defined in `EchoUI.Core/Element.cs`.
+The `[Element]` attribute used by the generator is in `EchoUI.Core/Element.cs`.
+`EchoUI.Core.Abstractions` contains a duplicate — ignore it.
 
-## Build / Run / Test Commands
+## Build / Run Commands
 
 ```bash
-# Restore all packages
 dotnet restore EchoUI.slnx
-
-# Build entire solution
 dotnet build EchoUI.slnx
-
-# Build a specific project
-dotnet build EchoUI.Core/EchoUI.Core.csproj
-
-# Run demo
-dotnet run --project EchoUI.Demo.Web/EchoUI.Demo.Web.csproj
+dotnet build EchoUI.Core/EchoUI.Core.csproj          # single project
+dotnet run --project EchoUI.Demo.Web/EchoUI.Demo.Web.csproj    # web demo
+dotnet run --project EchoUI.Demo.Win32/EchoUI.Demo.Win32.csproj # win32 demo
 ```
 
-There is no test project or test framework configured. If adding tests, use xUnit targeting
-net9.0 and follow the naming convention `EchoUI.Core.Tests/`.
+No test project exists. If adding tests, use xUnit targeting net9.0 in `EchoUI.Core.Tests/`.
+No linter, formatter, CI/CD, or `.editorconfig` is configured.
 
-There is no linter, formatter, CI/CD pipeline, or `.editorconfig`.
+## Target Frameworks & Global Settings
 
-## Target Framework & Global Settings
+| Project | TFM | ImplicitUsings | AllowUnsafe | Notes |
+|---|---|---|---|---|
+| EchoUI.Core | net9.0 | enable | no | References Generator as Analyzer |
+| EchoUI.Generator | netstandard2.0 | no | no | LangVersion=latest, Roslyn 4.14.0 |
+| EchoUI.Render.Web | net9.0 | **no** | yes | Explicit `using` statements required |
+| EchoUI.Render.Win32 | net9.0-windows | enable | yes | System.Drawing.Common 9.0.0 |
+| EchoUI.Demo | net9.0 | enable | no | Markdig 0.41.3 |
+| EchoUI.Demo.Web | net9.0 | no | yes | SDK: Microsoft.NET.Sdk.WebAssembly |
+| EchoUI.Demo.Win32 | net9.0-windows | no | yes | OutputType=WinExe, PublishAot |
 
-- .NET 9.0 (`net9.0`) for all projects except the generator (`netstandard2.0`).
-- Nullable reference types enabled globally via `Directory.Build.props`.
-- Implicit usings enabled per-project in `EchoUI.Core` and `EchoUI.Demo` `.csproj` files.
-- `EchoUI.Render.Web` does NOT have implicit usings — uses explicit `using` statements.
-- `AllowUnsafeBlocks` is enabled in `EchoUI.Render.Web` and `EchoUI.Demo.Web`.
+Nullable reference types enabled globally via `Directory.Build.props`.
 
-## Code Style Guidelines
+## Code Style
 
 ### Language & Comments
 
-- Code comments and XML doc summaries are written primarily in **Chinese**. Maintain this
-  convention for new code. (A few files like `WebRenderer.cs` and `Dashboard.cs` have English
-  comments — prefer Chinese for consistency.)
+- Comments and XML doc summaries are primarily in **Chinese**. Maintain this for new code.
+- A few files (WebRenderer.cs, Dashboard.cs, Tabs.cs) have English comments — prefer Chinese.
 - Public API members should have `<summary>` XML doc comments.
 
 ### Naming Conventions
 
-- **PascalCase** for all public types, methods, properties, and enum members.
-- **camelCase** for local variables and parameters.
-- **_camelCase** (underscore prefix) for private fields: `_renderer`, `_rootContainer`.
-- Props classes: `{Component}Props` (e.g., `ContainerProps`, `ButtonProps`, `TextProps`).
-- User-defined components: static methods with signature `Element? MethodName(Props props)`.
-- Built-in element factories: return `Element` (non-nullable) and accept their specific Props
-  type (e.g., `Button(ButtonProps props)` returns `Element`).
-- Native element type names use prefix `EchoUI-` (e.g., `"EchoUI-Container"`, `"EchoUI-Text"`,
-  `"EchoUI-Input"`). These are defined in `ElementCoreName` in `Elements.cs`.
+- **PascalCase**: public types, methods, properties, enum members.
+- **camelCase**: local variables and parameters.
+- **_camelCase**: private fields (`_renderer`, `_rootContainer`).
+- Props classes: `{Component}Props` (e.g., `ContainerProps`, `ButtonProps`).
+- User components: `static Element? MethodName(Props props)`.
+- Built-in factories: return `Element` (non-nullable), accept specific Props type.
+- Native element type names: `"EchoUI-"` prefix (e.g., `"EchoUI-Container"`).
 
 ### Types & Records
 
-- Props are `record class` inheriting from `Props` base class.
-- Value types (Color, Dimension, Spacing, Point, Transition) are `readonly record struct`.
-- Use `init`-only properties on Props classes: `T? Property { get; init; }`.
-- `ElementType` is a `readonly record struct` with implicit operators.
-- `Ref<T>` has an implicit conversion operator to `T` — values can be used directly.
-- `NativeProps` enables raw native element creation with arbitrary properties via
-  `ValueDictionary<string, object?>`.
+- Props: `record class` inheriting from `Props` base. Use `init`-only properties.
+- Value types (Color, Dimension, Spacing, Point, Transition): `readonly record struct`.
+- `ElementType`: `readonly record struct` with implicit operators from `string`/`Component`/`AsyncComponent`.
+- `Ref<T>`: has implicit conversion to `T`.
+- `NativeProps`: arbitrary properties via `ValueDictionary<string, object?>`.
 
 ### Component Patterns
 
-- Sync components use the `Component` delegate: `Element? Fn(Props props)`.
-- Async components use the `AsyncComponent` delegate: `Task<Element?> Fn(Props props)`.
-- Use `static EchoUI.Core.Elements` and `static EchoUI.Core.Hooks` imports in component files.
-- Hooks are called via static methods: `State<T>()`, `Effect()`, `Memo<T>()`, `Shared<T>()`.
-- State hook returns: `(Ref<T> Value, ValueSetter<T> SetValue, StateUpdater<T> UpdateValue)`.
-- Access state values via `.Value` property on `Ref<T>` (or rely on implicit conversion).
-- Children are passed as `IReadOnlyList<Element>` via collection expressions: `[el1, el2]`.
+- Sync: `Component` delegate — `Element? Fn(Props props)`.
+- Async: `AsyncComponent` delegate — `Task<Element?> Fn(Props props)`.
+- Import `static EchoUI.Core.Elements` and `static EchoUI.Core.Hooks` in component files.
+- Hooks: `State<T>()`, `Effect()`, `Memo<T>()`, `Shared<T>()` — static methods.
+- State returns: `(Ref<T> Value, ValueSetter<T> SetValue, StateUpdater<T> UpdateValue)`.
+- Children: `IReadOnlyList<Element>` via collection expressions `[el1, el2]`.
 
-### Source Generator (`[Element]` attribute)
+### Source Generator (`[Element]`)
 
-- The `[Element]` attribute is defined in `EchoUI.Core/Element.cs` (namespace `EchoUI.Core`).
-- The generator targets metadata name `EchoUI.Core.ElementAttribute`.
-- Mark component factory methods with `[Element]` to auto-generate named-parameter overloads.
-- Use `DefaultProperty` to specify which prop becomes the first positional parameter:
-  `[Element(DefaultProperty = nameof(ButtonProps.Text))]`.
-- The containing class **must** be `partial` (diagnostic `EG001` if not).
+- Attribute: `EchoUI.Core/Element.cs`, namespace `EchoUI.Core`.
+- Containing class **must** be `partial` (diagnostic `EG001`).
+- `DefaultProperty` sets the first positional parameter.
 - Generated files: `{ClassName}.{MethodName}.ElementOverload.g.cs`.
 
 ### Element Creation
 
-- Native elements: `Container(new ContainerProps { ... })` or generated overload.
-- Component elements: `Elements.Create(MyComponent, new Props { Key = "..." })`.
-- Memoized elements: `Elements.Memo(MyComponent, props)` — uses record equality for skip check.
+- Native: `Container(new ContainerProps { ... })` or generated overload.
+- Component: `Elements.Create(MyComponent, new Props { Key = "..." })`.
+- Memoized: `Elements.Memo(MyComponent, props)` — record equality for skip check.
 
 ### Error Handling
 
-- Hooks throw `InvalidOperationException` when called outside a component render context.
-- Use null checks and `ArgumentNullException` for required parameters.
-- The reconciler uses `try/finally` to restore `Hooks.Context` after rendering.
-- Async components support `Fallback` elements shown during loading.
+- Hooks throw `InvalidOperationException` outside render context.
+- Use `ArgumentNullException` for required parameters.
+- Reconciler uses `try/finally` to restore `Hooks.Context`.
+- Async components support `Fallback` elements during loading.
 
 ### Formatting
 
-- Indentation: **4 spaces** in C# files. Prefer **tabs** in `.csproj` files (some use spaces).
-- Braces on their own line (Allman style) for type and method declarations.
-- Single-line expression bodies (`=>`) for simple properties and short methods.
-- Collection expressions `[item1, item2]` preferred over `new List<T> { ... }`.
+- **4 spaces** indentation in C#. Tabs in `.csproj` (some inconsistency).
+- Allman-style braces for type/method declarations.
+- Expression bodies (`=>`) for simple properties and short methods.
+- Collection expressions `[a, b]` preferred over `new List<T> { ... }`.
 
-### Key Architectural Rules
+## Key Architecture
 
-- The `Reconciler` owns the component tree and schedules updates via `IUpdateScheduler`.
-- `HookContext` is stored in a `[ThreadStatic]` field — hooks are not thread-safe across components.
-- Props diffing uses reflection (`GetProperties()`) — keep Props classes lean.
-- Delegate-typed props (event handlers) are compared by null-vs-non-null only, not by reference.
-- `PropertyPatch` (defined in `IRenderer.cs`) carries changed properties as
-  `Dictionary<string, object?>` to the renderer.
-- `WebRenderer` uses `System.Text.Json` source generation (`WebRendererJsonContext`) for
-  serialization in the rendering pipeline.
+- `Reconciler` owns the component tree, schedules updates via `IUpdateScheduler`.
+- `HookContext` is `[ThreadStatic]` — hooks are not thread-safe across components.
+- Props diffing uses reflection (`GetProperties()`) — keep Props lean.
+- Delegate props compared by null-vs-non-null only, not by reference.
+- `PropertyPatch` carries `Dictionary<string, object?>` to the renderer.
+- `WebRenderer` uses `System.Text.Json` source gen (`WebRendererJsonContext`).
+- `Win32Renderer` uses GDI+ self-drawing with a simplified Flexbox layout engine.
 
-### File Organization
+## File Organization
 
-- One primary type per file, named to match the type (e.g., `Reconciler.cs`, `Hooks.cs`).
-- Related small types (delegates, enums, helper structs) may share a file (e.g., `Types.cs`).
-- `IRenderer` and `IUpdateScheduler` interfaces live alongside `PropertyPatch` in `IRenderer.cs`.
-- Built-in composite elements live in `EchoUI.Core/Elements/` (Button, CheckBox, ComboBox,
-  Input, RadioGroup, Switch, Tabs).
-- Demo: `App.cs` is the entry point; `Dashboard.cs` contains the main UI; `MarkdownRenderer.cs`
-  has the markdown component.
+- One primary type per file, named to match (e.g., `Reconciler.cs`, `Hooks.cs`).
+- Small related types may share a file (e.g., `Types.cs`).
+- `IRenderer`/`IUpdateScheduler`/`PropertyPatch` share `IRenderer.cs`.
+- Built-in elements: `EchoUI.Core/Elements/` (Button, CheckBox, ComboBox, Input, RadioGroup, Switch, Tabs).
+- Win32 renderer files: `Win32Renderer.cs`, `Win32Element.cs`, `Win32Window.cs`, `GdiPainter.cs`,
+  `FlexLayout.cs`, `HitTest.cs`, `NativeInterop.cs`, `Win32UpdateScheduler.cs`, `Win32SynchronizationContext.cs`.
+- Demo entry: `App.cs`; main UI: `Dashboard.cs`; markdown: `MarkdownRenderer.cs`.
 - Partial classes span files when the source generator extends them (e.g., `Elements` class).
 
-### Dependencies
+## Dependencies
 
 - **Markdig** 0.41.3 — Markdown parsing (EchoUI.Demo).
 - **Microsoft.CodeAnalysis.CSharp** 4.14.0 — Roslyn APIs (EchoUI.Generator).
-- **Microsoft.CodeAnalysis.Analyzers** 5.0.0-preview — analyzer support (EchoUI.Generator).
-- No external test, lint, or formatting dependencies.
+- **System.Drawing.Common** 9.0.0 — GDI+ rendering (EchoUI.Render.Win32).
+- No test, lint, or formatting dependencies.
