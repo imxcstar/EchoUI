@@ -101,6 +101,8 @@ namespace EchoUI.Render.Win32
             ElementType = elementType;
         }
 
+        public Image? NativeImage { get; set; }
+
         /// <summary>
         /// 获取元素在窗口中的绝对边界矩形
         /// </summary>

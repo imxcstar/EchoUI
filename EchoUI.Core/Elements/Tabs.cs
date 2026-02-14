@@ -126,7 +126,9 @@ namespace EchoUI.Core
             var contentTrack = Container(new ContainerProps
             {
                 Direction = LayoutDirection.Horizontal,
-                Children = allPanels
+                Children = allPanels,
+                Width = Dimension.Percent(100),
+                FlexGrow = 1
             });
 
             return Container(new ContainerProps
@@ -149,8 +151,10 @@ namespace EchoUI.Core
                     // Content Viewport (acts as a mask for the sliding track)
                     Container(new ContainerProps
                     {
-                        Direction= LayoutDirection.Horizontal,
-                        Children = [contentTrack]
+                        Direction = LayoutDirection.Horizontal,
+                        Children = [contentTrack],
+                        FlexGrow = 1,
+                        Width = Dimension.Percent(100)
                     })
                 ]
             });

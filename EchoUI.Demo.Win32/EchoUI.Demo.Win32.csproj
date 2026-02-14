@@ -8,6 +8,18 @@
 		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 	<ItemGroup>
+	  <Content Include="img\1.jpg">
+	    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+	    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Include="img\2.jpg">
+	    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+	    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Demo\EchoUI.Demo.csproj" />
 		<ProjectReference Include="..\EchoUI.Render.Win32\EchoUI.Render.Win32.csproj" />
 	</ItemGroup>

@@ -68,6 +68,9 @@ namespace EchoUI.Render.Win32
                     // Input 由原生 Edit 控件绘制，这里只画边框/背景
                     PaintInputBackground(g, element, bounds);
                     break;
+                case "img":
+                    PaintImage(g, element, bounds);
+                    break;
                 default:
                     // 未知类型当作容器处理
                     PaintContainer(g, element, bounds, clipRect, skippedElements);
@@ -202,8 +205,9 @@ namespace EchoUI.Render.Win32
             var format = new StringFormat
             {
                 Alignment = StringAlignment.Near,
-                LineAlignment = StringAlignment.Near,
-                FormatFlags = StringFormatFlags.NoWrap
+
+                LineAlignment = StringAlignment.Near
+                // Allow wrapping by default
             };
 
             g.DrawString(element.Text, font, brush, bounds.Location, format);
@@ -281,6 +285,29 @@ namespace EchoUI.Render.Win32
             using var thumbBrush = new SolidBrush(System.Drawing.Color.FromArgb(128, 128, 128, 128));
             using var thumbPath = CreateRoundedRect(thumbRect, scrollbarWidth / 2);
             g.FillPath(thumbBrush, thumbPath);
+        }
+
+        private static void PaintImage(Graphics g, Win32Element element, RectangleF bounds)
+        {
+            if (element.NativeImage == null) return;
+            if (bounds.Width <= 0 || bounds.Height <= 0) return;
+
+            // 如果有圆角，应用裁剪
+            GraphicsContainer? container = null;
+            if (element.BorderRadius > 0)
+            {
+                container = g.BeginContainer();
+                using var path = CreateRoundedRect(bounds, element.BorderRadius);
+                g.SetClip(path);
+            }
+
+            // 绘制图片 (缩放以填充)
+            g.DrawImage(element.NativeImage, bounds);
+
+            if (container != null)
+            {
+                g.EndContainer(container);
+            }
         }
 
         // --- 辅助方法 ---

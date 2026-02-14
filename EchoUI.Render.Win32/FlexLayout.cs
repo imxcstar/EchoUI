@@ -415,7 +415,7 @@ namespace EchoUI.Render.Win32
         private static float MeasureIntrinsicHeight(Win32Element element, float availableWidth, float vpW, float vpH)
         {
             if (element.ElementType == ElementCoreName.Text)
-                return MeasureTextHeight(element);
+                return MeasureTextHeight(element, availableWidth);
 
             if (element.ElementType == ElementCoreName.Input)
                 return 24; // Input 默认高度
@@ -470,10 +470,20 @@ namespace EchoUI.Render.Win32
             return width + 4;
         }
 
-        private static float MeasureTextHeight(Win32Element element)
+        private static float MeasureTextHeight(Win32Element element, float widthConstraint)
         {
             float fontSize = element.FontSize > 0 ? element.FontSize : 14;
-            return fontSize * 1.4f;
+            float lineHeight = fontSize * 1.4f;
+            
+            if (string.IsNullOrEmpty(element.Text)) return 0;
+            if (widthConstraint <= 0) return lineHeight;
+
+            float textWidth = MeasureTextWidth(element);
+            if (textWidth <= widthConstraint) return lineHeight;
+
+            // 简单估算行数
+            int lines = (int)Math.Ceiling(textWidth / widthConstraint);
+            return lines * lineHeight;
         }
 
         private static (float Left, float Top, float Right, float Bottom) ResolveSpacing(

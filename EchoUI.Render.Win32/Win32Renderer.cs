@@ -296,6 +296,19 @@ namespace EchoUI.Render.Win32
             {
                 element.Text = propValue?.ToString();
             }
+
+            // 处理图片
+            if (element.ElementType == "img")
+            {
+                if (propName == "src" && propValue is string src)
+                {
+                    LoadImage(element, src);
+                }
+                else if (propName == "style" && propValue is string style)
+                {
+                    ParseStyle(element, style);
+                }
+            }
         }
 
         // --- 事件处理器同步 ---
@@ -438,6 +451,7 @@ namespace EchoUI.Render.Win32
             {
                 _editElements.Remove(element.EditHwnd);
 
+
                 // 清理 GDI 资源
                 if (element.NativeFontHandle != 0)
                 {
@@ -453,6 +467,12 @@ namespace EchoUI.Render.Win32
                 if (NativeInterop.IsWindow(element.EditHwnd))
                     NativeInterop.DestroyWindow(element.EditHwnd);
                 element.EditHwnd = 0;
+            }
+
+            if (element.NativeImage != null)
+            {
+                element.NativeImage.Dispose();
+                element.NativeImage = null;
             }
 
             foreach (var child in element.Children)
@@ -590,6 +610,64 @@ namespace EchoUI.Render.Win32
             };
         }
 
+
+        private void LoadImage(Win32Element element, string src)
+        {
+            try
+            {
+                string? path = null;
+                if (Path.IsPathRooted(src) && File.Exists(src))
+                {
+                    path = src;
+                }
+                else
+                {
+                    // 尝试从当前目录加载
+                    var currentDir = AppContext.BaseDirectory;
+                    var p1 = Path.Combine(currentDir, src.TrimStart('/', '\\'));
+                    if (File.Exists(p1)) path = p1;
+                }
+
+                if (path != null)
+                {
+                    if (element.NativeImage != null) element.NativeImage.Dispose();
+                    element.NativeImage = Image.FromFile(path);
+                }
+            }
+            catch { /* 忽略加载错误 */ }
+        }
+
+        private void ParseStyle(Win32Element element, string style)
+        {
+            var parts = style.Split(';');
+            foreach (var part in parts)
+            {
+                var kv = part.Split(':');
+                if (kv.Length != 2) continue;
+                var key = kv[0].Trim().ToLower();
+                var value = kv[1].Trim().ToLower();
+
+                if (key == "width")
+                {
+                    if (value.EndsWith("px") && float.TryParse(value[..^2], out float v1))
+                        element.Width = Dimension.Pixels(v1);
+                    else if (value.EndsWith("%") && float.TryParse(value[..^1], out float v2))
+                        element.Width = Dimension.Percent(v2);
+                }
+                else if (key == "height")
+                {
+                    if (value.EndsWith("px") && float.TryParse(value[..^2], out float v3))
+                        element.Height = Dimension.Pixels(v3);
+                    else if (value.EndsWith("%") && float.TryParse(value[..^1], out float v4))
+                        element.Height = Dimension.Percent(v4);
+                }
+                else if (key == "border-radius")
+                {
+                    if (value.EndsWith("px") && float.TryParse(value[..^2], out float v5))
+                        element.BorderRadius = v5;
+                }
+            }
+        }
 
         internal Win32Element? GetElementByEditHwnd(nint hwnd)
         {

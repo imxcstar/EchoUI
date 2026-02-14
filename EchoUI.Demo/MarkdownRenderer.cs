@@ -54,19 +54,8 @@ namespace EchoUI.Demo
                                                          // 在你的框架中似乎没有 FontWeight，否则这里会设置 Bold
                 }),
 
-                // 段落 -> 普通的 Text 元素
-                ParagraphBlock paragraph => Container(new ContainerProps
-                {
-                    // 段落之间需要一些垂直间距
-                    Margin = new Spacing(Dimension.ZeroPixels, Dimension.Pixels(8)),
-                    Children = [
-                        Text(new TextProps
-                    {
-                        Text = ExtractTextFromInlines(paragraph.Inline),
-                        FontSize = 14,
-                    })
-                    ]
-                }),
+                // 段落 -> 可能包含图片，需要特殊处理
+                ParagraphBlock paragraph => RenderParagraph(paragraph),
 
                 // 列表 -> 带有左内边距的 Container
                 ListBlock list => ToContainer(list, LayoutDirection.Vertical, new Spacing(Dimension.Pixels(20), Dimension.ZeroPixels, Dimension.ZeroPixels, Dimension.ZeroPixels), childrenPrefixer: (child, index) =>
@@ -199,5 +188,68 @@ namespace EchoUI.Demo
             }
             return sb.ToString();
         }
+        private static Element RenderParagraph(ParagraphBlock paragraph)
+        {
+            var children = new List<Element>();
+            var currentText = new StringBuilder();
+
+            void FlushText()
+            {
+                if (currentText.Length > 0)
+                {
+                    children.Add(Text(new TextProps
+                    {
+                        Text = currentText.ToString(),
+                        FontSize = 14
+                    }));
+                    currentText.Clear();
+                }
+            }
+
+            void ProcessInlines(ContainerInline inlines)
+            {
+                foreach (var inline in inlines)
+                {
+                    if (inline is LinkInline link && link.IsImage)
+                    {
+                        FlushText();
+                        // 渲染图片
+                        string url = link.Url ?? "";
+                        children.Add(Native(new NativeProps
+                        {
+                            Type = "img",
+                            Properties = new Dictionary<string, object?> { { "src", url }, { "style", "width:100%" } }
+                        }));
+                    }
+                    else if (inline is LiteralInline literal)
+                    {
+                        currentText.Append(literal.Content);
+                    }
+                    else if (inline is ContainerInline container)
+                    {
+                        ProcessInlines(container);
+                    }
+                    else if (inline is LineBreakInline)
+                    {
+                         currentText.AppendLine();
+                    }
+                }
+            }
+
+            if (paragraph.Inline != null)
+            {
+                ProcessInlines(paragraph.Inline);
+            }
+            FlushText();
+
+            return Container(new ContainerProps
+            {
+                Margin = new Spacing(Dimension.ZeroPixels, Dimension.Pixels(8)),
+                Direction = LayoutDirection.Vertical, // 图片单独占一行
+                Gap = 4,
+                Children = children
+            });
+        }
+
     }
 }
