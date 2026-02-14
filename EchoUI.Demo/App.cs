@@ -191,6 +191,7 @@ public static Element App() {
                 "test2",
                 "test3"
             ]),
+            Button("testButton")
         ]);
     }
 }

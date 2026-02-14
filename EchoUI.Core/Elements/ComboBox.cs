@@ -80,6 +80,7 @@ namespace EchoUI.Core
             {
                 Key = props.Key,
                 Direction = LayoutDirection.Vertical,
+                Overflow = Overflow.Visible,
                 Children =
                 [
                     // Display box
@@ -102,20 +103,26 @@ namespace EchoUI.Core
                         ]
                     }),
 
-                    // Dropdown list (rendered below if open)
+                    // Dropdown list wrapper (Floating)
                     Container(new ContainerProps
                     {
-                        Width = Dimension.Percent(100),
-                        Height = isOpen.Value ? Dimension.Pixels(35 * props.Options.Count) : Dimension.ZeroPixels,
-                        Transitions = [
-                            [nameof(ContainerProps.Height), new Transition(150, Easing.EaseInOut)]
-                        ],
-                        Direction = LayoutDirection.Vertical,
-                        BackgroundColor = props.DropdownBackgroundColor ?? Color.White,
-                        BorderWidth = isOpen.Value ? 1 : 0,
-                        BorderStyle = BorderStyle.Solid,
-                        BorderColor = props.BorderColor ?? Color.Gray,
-                        Children = dropdownItems
+                        Float = true,
+                        Children = [
+                            Container(new ContainerProps
+                            {
+                                Width = Dimension.Percent(100),
+                                Height = isOpen.Value ? Dimension.Pixels(35 * props.Options.Count + 2) : Dimension.ZeroPixels,
+                                Transitions = [
+                                    [nameof(ContainerProps.Height), new Transition(150, Easing.EaseInOut)]
+                                ],
+                                Direction = LayoutDirection.Vertical,
+                                BackgroundColor = props.DropdownBackgroundColor ?? Color.White,
+                                BorderWidth = isOpen.Value ? 1 : 0,
+                                BorderStyle = BorderStyle.Solid,
+                                BorderColor = props.BorderColor ?? Color.Gray,
+                                Children = dropdownItems
+                            })
+                        ]
                     })
                 ]
             });

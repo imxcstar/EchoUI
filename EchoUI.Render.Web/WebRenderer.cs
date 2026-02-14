@@ -87,7 +87,14 @@ namespace EchoUI.Render.Web
                     domPatch.Styles ??= new();
                     domPatch.Styles["display"] = "flex";
                     domPatch.Styles["box-sizing"] = "border-box";
-                    domPatch.Styles["overflow"] = "hidden";
+                    domPatch.Styles["overflow"] = (p.Overflow.HasValue) ? ToCss(p.Overflow) : null;
+                    if (p.Float)
+                    {
+                        domPatch.Styles["height"] = "0";
+                        domPatch.Styles["min-height"] = "0";
+                        domPatch.Styles["overflow"] = "visible";
+                        domPatch.Styles["z-index"] = "1000";
+                    }
                     domPatch.Styles["flex-shrink"] = "0";
                     domPatch.Styles["flex-grow"] = "0";
                     break;
@@ -131,6 +138,27 @@ namespace EchoUI.Render.Web
                         case nameof(ContainerProps.MaxHeight): domPatch.SetStyle("max-height", ToCss(propValue as Dimension?)); break;
                         case nameof(ContainerProps.Margin): SetSpacingStyles(domPatch, "margin", propValue as Spacing?); break;
                         case nameof(ContainerProps.Padding): SetSpacingStyles(domPatch, "padding", propValue as Spacing?); break;
+                        case nameof(ContainerProps.Overflow): domPatch.SetStyle("overflow", ToCss(propValue as Overflow?)); break;
+                        case nameof(ContainerProps.Float):
+                            if ((bool)propValue)
+                            {
+                                domPatch.SetStyle("height", "0");
+                                domPatch.SetStyle("min-height", "0");
+                                domPatch.SetStyle("overflow", "visible");
+                                domPatch.SetStyle("z-index", "1000");
+                            }
+                            else
+                            {
+                                // Reset to default or calculated values if Float is turned off dynamically (complex, but for now just clear/reset)
+                                // In a real reconciler we might need to re-apply Height/MinHeight/Overflow from other props if they exist.
+                                // For now, assuming Full Re-render or just standard patch flow.
+                                // If Float goes false, we likely need to clear these forced styles.
+                                domPatch.SetStyle("height", null);
+                                domPatch.SetStyle("min-height", null);
+                                domPatch.SetStyle("overflow", null); 
+                                domPatch.SetStyle("z-index", null);
+                            }
+                            break;
 
                         // --- Flexbox ---
                         case nameof(ContainerProps.Direction): domPatch.SetStyle("flex-direction", propValue is LayoutDirection.Vertical ? "column" : "row"); break;
@@ -210,6 +238,7 @@ namespace EchoUI.Render.Web
         private string? ToCss(Dimension? dim) => dim.HasValue ? dim.Value.Unit switch { DimensionUnit.Pixels => $"{dim.Value.Value}px", DimensionUnit.Percent => $"{dim.Value.Value}%", _ => "" } : null;
         private string? ToCss(Color? color) => color.HasValue ? $"rgba({color.Value.R},{color.Value.G},{color.Value.B},{(float)color.Value.A / 255})" : null;
         private string? ToCss(JustifyContent? jc) => jc switch { JustifyContent.SpaceAround => "space-around", JustifyContent.SpaceBetween => "space-between", _ => jc?.ToString().ToLower() };
+        private string? ToCss(Overflow? overflow) => overflow?.ToString().ToLower();
         private string? ToCss(ValueDictionary<string, Transition>? transitions)
         {
             var data = transitions?.Data;

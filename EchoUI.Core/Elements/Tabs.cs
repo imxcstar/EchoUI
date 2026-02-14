@@ -118,6 +118,7 @@ namespace EchoUI.Core
                     {
                         [nameof(ContainerProps.Width)] = new(props.AnimationDuration, Easing.EaseInOut)
                     }),
+                    Overflow = Overflow.Hidden
                 }));
             }
 

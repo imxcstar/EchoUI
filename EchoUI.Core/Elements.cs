@@ -48,6 +48,16 @@ namespace EchoUI.Core
         /// </summary>
         public Spacing? Margin { get; init; }
 
+        /// <summary>
+        /// 是否浮动（不占据布局空间）。
+        /// </summary>
+        public bool Float { get; init; } = false;
+
+        /// <summary>
+        /// 内容溢出处理方式。
+        /// </summary>
+        public Overflow? Overflow { get; init; }
+
         // --- 背景 ---
         /// <summary>
         /// 元素的背景颜色。

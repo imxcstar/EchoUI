@@ -63,6 +63,11 @@ namespace EchoUI.Core
     public enum DimensionUnit { Pixels, Percent }
 
     /// <summary>
+    /// 内容溢出处理方式。
+    /// </summary>
+    public enum Overflow { Visible, Hidden, Scroll, Auto }
+
+    /// <summary>
     /// 代表边距（Margin）或填充（Padding）的间距值，可以独立控制四个方向。
     /// </summary>
     public readonly record struct Spacing(Dimension Left, Dimension Top, Dimension Right, Dimension Bottom)
