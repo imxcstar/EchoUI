@@ -177,7 +177,20 @@ namespace EchoUI.Render.Win32
                     fontStyle = FontStyle.Bold; // GDI+ 没有 SemiBold，用 Bold 近似
             }
 
-            var fontFamily = element.FontFamily ?? "Segoe UI";
+            var fontFamily = element.FontFamily;
+            if (string.IsNullOrEmpty(fontFamily))
+            {
+                // 如果文本包含 Emoji 或特殊符号，优先使用 Segoe UI Emoji
+                // 简单的启发式检查：代理对（常见 Emoji）或特定符号范围
+                if (IsLikelyEmojiOrSymbol(element.Text))
+                {
+                    fontFamily = "Segoe UI Emoji";
+                }
+                else
+                {
+                    fontFamily = "Segoe UI";
+                }
+            }
             using var font = new Font(fontFamily, fontSize, fontStyle, GraphicsUnit.Pixel);
 
             var color = element.TextColor.HasValue
@@ -266,6 +279,22 @@ namespace EchoUI.Render.Win32
 
             path.CloseFigure();
             return path;
+        }
+
+        private static bool IsLikelyEmojiOrSymbol(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            foreach (var c in text)
+            {
+                // 检查代理对（Emoji 通常在非基本多语言平面）
+                if (char.IsSurrogate(c)) return true;
+
+                // 检查特定符号区域（例如 Dingbats, Geometric Shapes, Misc Symbols 等）
+                // 0x2000-0x33FF 涵盖了常见标点、符号、箭头、数学符号、CJK 符号等
+                // 其中包含了常见 Emoji 所在的 Misc Symbols (2600-26FF), Dingbats (2700-27BF)
+                if (c >= 0x2000 && c <= 0x33FF) return true;
+            }
+            return false;
         }
     }
 }

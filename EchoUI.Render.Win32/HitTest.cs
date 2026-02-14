@@ -13,21 +13,11 @@ namespace EchoUI.Render.Win32
         private Win32Element? _pressedElement;
         private Win32Element? _focusedElement;
         private readonly Win32Renderer _renderer;
-        private static readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "hittest_debug.log");
         private static int _logCount;
 
         public HitTestManager(Win32Renderer renderer)
         {
             _renderer = renderer;
-            // 清空旧日志
-            try { File.WriteAllText(_logPath, ""); } catch { }
-        }
-
-        private static void Log(string msg)
-        {
-            if (_logCount > 500) return; // 限制日志量
-            _logCount++;
-            try { File.AppendAllText(_logPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); } catch { }
         }
 
         /// <summary>
@@ -107,12 +97,6 @@ namespace EchoUI.Render.Win32
                 if (child.ElementType == ElementCoreName.Text && child.MouseThrough)
                     continue;
 
-                // 调试：记录有 OnClick 的子元素的布局
-                if (child.OnClick != null)
-                {
-                    Log($"  HitTest child[{i}] type={child.ElementType}, bounds={child.GetAbsoluteBounds()}, hasClick=true, mouse=({x},{y})");
-                }
-
                 var hit = HitTestRecursive(child, x, y);
                 if (hit != null) return hit;
             }
@@ -166,7 +150,6 @@ namespace EchoUI.Render.Win32
             var moveTarget = FindHandler(hit, e => e.OnMouseMove != null);
             if (moveTarget != null)
             {
-                Log($"MouseMove at ({x},{y}), hit={hit?.ElementType}, hitBounds={hit?.GetAbsoluteBounds()}, moveTarget={moveTarget.ElementType}, moveTargetBounds={moveTarget.GetAbsoluteBounds()}");
                 moveTarget.OnMouseMove?.Invoke(new Core.Point((int)x, (int)y));
             }
         }
@@ -181,7 +164,6 @@ namespace EchoUI.Render.Win32
 
             if (hit != null)
             {
-                Log($"MouseDown at ({x},{y}), hit={hit.ElementType}, hitBounds={hit.GetAbsoluteBounds()}, hasClick={hit.OnClick != null}");
                 _focusedElement = hit;
                 var downTarget = FindHandler(hit, e => e.OnMouseDown != null);
                 downTarget?.OnMouseDown?.Invoke();
@@ -205,7 +187,6 @@ namespace EchoUI.Render.Win32
                 if (hit == _pressedElement || IsAncestorOf(_pressedElement, hit) || IsAncestorOf(hit, _pressedElement))
                 {
                     var clickTarget = FindHandler(hit, e => e.OnClick != null);
-                    Log($"MouseUp at ({x},{y}), hit={hit.ElementType}, hitBounds={hit.GetAbsoluteBounds()}, hasClick={hit.OnClick != null}, clickTarget={clickTarget?.ElementType}, clickTargetHasClick={clickTarget?.OnClick != null}, pressed={_pressedElement?.ElementType}");
                     clickTarget?.OnClick?.Invoke(button);
                 }
 
