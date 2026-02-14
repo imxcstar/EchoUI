@@ -4,6 +4,12 @@
 
 一个受 React 启发的 .NET 9.0 声明式 UI 框架。内置虚拟 DOM 协调器（支持 diff）、Hooks 系统、Roslyn 源生成器，以及多渲染后端（Blazor WebAssembly 和 Win32 GDI+）。
 
+## 预览
+
+![预览 1](./Preview/1.png)
+
+![预览 2](./Preview/2.png)
+
 ## 特性
 
 - **声明式组件** — 以纯函数定义 UI，返回元素树，体验类似 React

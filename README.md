@@ -4,6 +4,12 @@
 
 A React-inspired declarative UI framework for .NET 9.0. Virtual DOM reconciler with diffing, hooks system, Roslyn source generator, and multiple rendering backends (Blazor WebAssembly & Win32 GDI+).
 
+## Preview
+
+![Preview 1](./Preview/1.png)
+
+![Preview 2](./Preview/2.png)
+
 ## Features
 
 - **Declarative Components** — Define UI as pure functions returning element trees, just like React
