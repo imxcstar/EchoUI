@@ -87,6 +87,9 @@ public class EchoUIPanel : Panel
     {
         AffectsMeasure<EchoUIPanel>(DirectionProperty, JustifyContentProperty, AlignItemsProperty, GapProperty);
         AffectsArrange<EchoUIPanel>(DirectionProperty, JustifyContentProperty, AlignItemsProperty, GapProperty);
+
+        // Ensure changes to attached properties on children trigger re-layout of the panel
+        AffectsParentMeasure<EchoUIPanel>(EchoWidthProperty, EchoHeightProperty, FlexGrowProperty, FlexShrinkProperty, IsFloatProperty);
     }
 
     /// <summary>

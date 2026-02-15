@@ -574,15 +574,20 @@ public class AvaloniaRenderer : IRenderer
 
     private void BringToFront(Control control)
     {
-        if (control.Parent is Panel parent)
+        var current = control;
+        while (current != null && current != _rootPanel)
         {
-            int maxZ = 0;
-            foreach (var child in parent.Children)
+            if (current.Parent is Panel parent)
             {
-                if (child.ZIndex > maxZ) maxZ = child.ZIndex;
+                int maxZ = 0;
+                foreach (var child in parent.Children)
+                {
+                    if (child.ZIndex > maxZ) maxZ = child.ZIndex;
+                }
+                if (current.ZIndex <= maxZ)
+                    current.ZIndex = maxZ + 1;
             }
-            if (control.ZIndex <= maxZ)
-                control.ZIndex = maxZ + 1;
+            current = current.Parent as Control;
         }
     }
 
