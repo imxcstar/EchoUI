@@ -196,7 +196,6 @@ public class EchoUIPanel : Panel
             if (GetIsFloat(child))
             {
                 // Float 元素：给它完整的父容器宽度，但不限制高度（让内容撑开）
-                // 先用完整宽度重新测量以获取内容高度
                 child.Measure(new Size(finalSize.Width, double.PositiveInfinity));
                 var floatDesired = child.DesiredSize;
                 child.Arrange(new Rect(0, 0, finalSize.Width, Math.Max(floatDesired.Height, finalSize.Height)));
@@ -209,19 +208,42 @@ public class EchoUIPanel : Panel
             double? resolvedW = ResolveDim(echoW, finalSize.Width, vpH);
             double? resolvedH = ResolveDim(echoH, finalSize.Height, vpH);
 
-            // 主轴基础尺寸
+            // 获取子元素的 Margin
+            var margin = child.Margin;
+            double marginMainStart = isRow ? margin.Left : margin.Top;
+            double marginMainEnd = isRow ? margin.Right : margin.Bottom;
+            double marginCrossStart = isRow ? margin.Top : margin.Left;
+            double marginCrossEnd = isRow ? margin.Bottom : margin.Right;
+            double marginMain = marginMainStart + marginMainEnd;
+            double marginCross = marginCrossStart + marginCrossEnd;
+
+            // 主轴基础尺寸（包含 margin）
             double mainBase;
             if (isRow)
-                mainBase = resolvedW ?? child.DesiredSize.Width;
+                mainBase = (resolvedW ?? child.DesiredSize.Width) + marginMain;
             else
-                mainBase = resolvedH ?? child.DesiredSize.Height;
+                mainBase = (resolvedH ?? child.DesiredSize.Height) + marginMain;
+
+            // 注意：如果 DesiredSize 已经包含了 margin（Avalonia 的 Measure 会把 margin 加进去），
+            // 那么对于没有 resolved 尺寸的情况，直接用 DesiredSize 即可
+            if (isRow && !resolvedW.HasValue)
+                mainBase = child.DesiredSize.Width;
+            else if (!isRow && !resolvedH.HasValue)
+                mainBase = child.DesiredSize.Height;
 
             // 交叉轴基础尺寸
             double crossBase;
             if (isRow)
-                crossBase = resolvedH ?? child.DesiredSize.Height;
+                crossBase = resolvedH.HasValue ? (resolvedH.Value + marginCross) : child.DesiredSize.Height;
             else
-                crossBase = resolvedW ?? child.DesiredSize.Width;
+                crossBase = resolvedW.HasValue ? (resolvedW.Value + marginCross) : child.DesiredSize.Width;
+
+            // 判断交叉轴是否有显式尺寸
+            bool hasExplicitCross;
+            if (isRow)
+                hasExplicitCross = resolvedH.HasValue || !double.IsNaN(child.Height);
+            else
+                hasExplicitCross = resolvedW.HasValue || !double.IsNaN(child.Width);
 
             items.Add(new FlexItem
             {
@@ -230,7 +252,11 @@ public class EchoUIPanel : Panel
                 CrossBase = crossBase,
                 Grow = GetFlexGrow(child),
                 Shrink = GetFlexShrink(child),
-                HasExplicitCross = isRow ? resolvedH.HasValue : resolvedW.HasValue,
+                HasExplicitCross = hasExplicitCross,
+                MarginMainStart = marginMainStart,
+                MarginMainEnd = marginMainEnd,
+                MarginCrossStart = marginCrossStart,
+                MarginCrossEnd = marginCrossEnd,
             });
         }
 
@@ -336,7 +362,7 @@ public class EchoUIPanel : Panel
             var item = items[i];
             double mainPos = cursor;
 
-            // 交叉轴尺寸：非 TextBlock 且没有显式交叉轴尺寸的容器，默认拉伸填满
+            // 交叉轴尺寸：没有显式交叉轴尺寸的容器类元素，默认拉伸填满
             double childCross = item.CrossBase;
             bool isContainer = item.Control is global::Avalonia.Controls.Border || item.Control is EchoUIPanel || item.Control is TextBox;
             if (isContainer && !item.HasExplicitCross)
@@ -359,7 +385,7 @@ public class EchoUIPanel : Panel
                     break;
             }
 
-            // 重新测量子元素以确保它知道最终分配的尺寸
+            // 计算实际 arrange 的矩形（Avalonia 的 Arrange 会自动处理 Margin）
             double arrangeW, arrangeH;
             if (isRow)
             {
@@ -372,7 +398,9 @@ public class EchoUIPanel : Panel
                 arrangeH = item.MainBase;
             }
 
-            item.Control.Measure(new Size(arrangeW, arrangeH));
+            // 确保尺寸不为负
+            arrangeW = Math.Max(0, arrangeW);
+            arrangeH = Math.Max(0, arrangeH);
 
             Rect rect;
             if (isRow)
@@ -401,5 +429,9 @@ public class EchoUIPanel : Panel
         public float Grow { get; set; }
         public float Shrink { get; set; }
         public bool HasExplicitCross { get; set; }
+        public double MarginMainStart { get; set; }
+        public double MarginMainEnd { get; set; }
+        public double MarginCrossStart { get; set; }
+        public double MarginCrossEnd { get; set; }
     }
 }
