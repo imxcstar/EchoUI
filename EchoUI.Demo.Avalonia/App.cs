@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Markup.Xaml;
 using Avalonia.Themes.Fluent;
 
 namespace EchoUI.Demo.Avalonia;
