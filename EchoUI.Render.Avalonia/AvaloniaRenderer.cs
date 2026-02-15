@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.Styling;
 using EchoUI.Core;
 
 namespace EchoUI.Render.Avalonia;
@@ -129,14 +130,31 @@ public class AvaloniaRenderer : IRenderer
 
     private static TextBox CreateTextBox()
     {
-        return new TextBox
+        var tb = new TextBox
         {
             AcceptsReturn = false,
             BorderThickness = new Thickness(0),
-            Padding = new Thickness(0),
+            // Padding = new Thickness(0), // Use default padding for correct height
             MinHeight = 0,
             MinWidth = 0,
+            Background = global::Avalonia.Media.Brushes.Transparent,
+            VerticalContentAlignment = VerticalAlignment.Center
         };
+
+        // Remove the default FocusAdorner to prevent the focus ring
+        tb.SetValue(TextBox.FocusAdornerProperty, null);
+
+        // Attempt to remove focus visual border by explicit style override
+        tb.Styles.Add(new Style(x => x.OfType<TextBox>().Class(":focus"))
+        {
+            Setters =
+            {
+                new Setter(TextBox.BorderThicknessProperty, new Thickness(0)),
+                new Setter(TextBox.BackgroundProperty, global::Avalonia.Media.Brushes.Transparent)
+            }
+        });
+
+        return tb;
     }
 
     private static Border CreateNativeElement(string type)
@@ -250,9 +268,7 @@ public class AvaloniaRenderer : IRenderer
                 EchoUIPanel.SetIsFloat(border, propValue is true);
                 if (propValue is true)
                 {
-                    // Float 容器：高度为 0 但内容可以溢出
-                    border.Height = 0;
-                    border.MinHeight = 0;
+                    // Float 容器：EchoUIPanel 负责布局时不占用空间
                     border.ClipToBounds = false;
                     border.ZIndex = 1000;
                     // 内部 panel 也不裁剪
@@ -438,6 +454,9 @@ public class AvaloniaRenderer : IRenderer
         {
             var handler = new EventHandler<PointerPressedEventArgs>((s, e) =>
             {
+                // Bring to front on interaction to ensure dropdowns/popups render on top of siblings
+                BringToFront(control);
+
                 if (p.OnClick != null)
                 {
                     var button = e.GetCurrentPoint(control).Properties.PointerUpdateKind switch
@@ -550,6 +569,20 @@ public class AvaloniaRenderer : IRenderer
                 control.PointerPressed += handler;
                 store.PointerPressed = handler;
             }
+        }
+    }
+
+    private void BringToFront(Control control)
+    {
+        if (control.Parent is Panel parent)
+        {
+            int maxZ = 0;
+            foreach (var child in parent.Children)
+            {
+                if (child.ZIndex > maxZ) maxZ = child.ZIndex;
+            }
+            if (control.ZIndex <= maxZ)
+                control.ZIndex = maxZ + 1;
         }
     }
 

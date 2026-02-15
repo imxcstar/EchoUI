@@ -132,7 +132,8 @@ public class EchoUIPanel : Panel
             if (!child.IsVisible) continue;
             if (GetIsFloat(child))
             {
-                // Float 元素用完整可用空间测量
+                // Float 元素：测量它，但不计入 normalCount (不参与 gap 计算)，也不计入 mainTotal
+                // 我们给它完整的约束，这样它可以根据内容撑开，或者根据百分比填充父容器
                 child.Measure(availableSize);
                 continue;
             }
@@ -193,14 +194,14 @@ public class EchoUIPanel : Panel
         foreach (var child in Children)
         {
             if (!child.IsVisible) continue;
-            if (GetIsFloat(child))
+            bool isFloat = GetIsFloat(child);
+            if (isFloat)
             {
-                // Float 元素：给它完整的父容器宽度，但不限制高度（让内容撑开）
+                // Float 元素：给它完整的父容器空间用于测量
                 child.Measure(new Size(finalSize.Width, double.PositiveInfinity));
-                var floatDesired = child.DesiredSize;
-                child.Arrange(new Rect(0, 0, finalSize.Width, Math.Max(floatDesired.Height, finalSize.Height)));
-                continue;
             }
+
+            // --- 下面的逻辑适用于所有元素 (包括 Float)，以便计算它们的位置 ---
 
             var echoW = GetEchoWidth(child);
             var echoH = GetEchoHeight(child);
@@ -257,18 +258,23 @@ public class EchoUIPanel : Panel
                 MarginMainEnd = marginMainEnd,
                 MarginCrossStart = marginCrossStart,
                 MarginCrossEnd = marginCrossEnd,
+                IsFloat = isFloat
             });
         }
 
         if (items.Count == 0) return finalSize;
 
-        int normalCount = items.Count;
+        // 计算普通流元素的数量 (排除 Float)
+        int normalCount = items.Count(x => !x.IsFloat);
         double totalGaps = normalCount > 1 ? gap * (normalCount - 1) : 0;
 
-        // 计算已用主轴空间
+        // 计算已用主轴空间 (Float 不占用主轴空间)
         double usedMain = totalGaps;
         foreach (var item in items)
-            usedMain += item.MainBase;
+        {
+            if (!item.IsFloat)
+                usedMain += item.MainBase;
+        }
 
         double freeSpace = mainSize - usedMain;
 
@@ -276,7 +282,10 @@ public class EchoUIPanel : Panel
         if (freeSpace > 0)
         {
             double totalGrow = 0;
-            foreach (var item in items) totalGrow += item.Grow;
+            foreach (var item in items) 
+            {
+                if (!item.IsFloat) totalGrow += item.Grow;
+            }
             if (totalGrow > 0)
             {
                 foreach (var item in items)
@@ -289,7 +298,10 @@ public class EchoUIPanel : Panel
         else if (freeSpace < 0)
         {
             double totalShrink = 0;
-            foreach (var item in items) totalShrink += item.Shrink * item.MainBase;
+            foreach (var item in items) 
+            {
+                if (!item.IsFloat) totalShrink += item.Shrink * item.MainBase;
+            }
             if (totalShrink > 0)
             {
                 foreach (var item in items)
@@ -325,7 +337,10 @@ public class EchoUIPanel : Panel
 
         // JustifyContent 计算起始偏移和间距
         double actualUsedMain = totalGaps;
-        foreach (var item in items) actualUsedMain += item.MainBase;
+        foreach (var item in items)
+        {
+            if (!item.IsFloat) actualUsedMain += item.MainBase;
+        }
 
         double remainingSpace = Math.Max(0, mainSize - actualUsedMain);
         double mainOffset = 0;
@@ -365,6 +380,8 @@ public class EchoUIPanel : Panel
             // 交叉轴尺寸：没有显式交叉轴尺寸的容器类元素，默认拉伸填满
             double childCross = item.CrossBase;
             bool isContainer = item.Control is global::Avalonia.Controls.Border || item.Control is EchoUIPanel || item.Control is TextBox;
+            // Float 元素的 CrossBase 通常也应该拉伸 (除非有显式尺寸)，因为它通常是 Overlay
+            // 这里我们保持原有逻辑：如果是容器且无显式尺寸，就拉伸
             if (isContainer && !item.HasExplicitCross)
             {
                 childCross = crossSize;
@@ -410,11 +427,34 @@ public class EchoUIPanel : Panel
 
             item.Control.Arrange(rect);
 
-            cursor = mainPos + item.MainBase + gap;
-            if (i < normalCount - 1 &&
-                (JustifyContent == JustifyContent.SpaceBetween || JustifyContent == JustifyContent.SpaceAround))
+            // 如果是 Float 元素，不推进 Layout Cursor，使其成为 Overlay
+            if (item.IsFloat)
             {
-                cursor += spaceBetween;
+                // Do nothing to cursor
+            }
+            else
+            {
+                cursor = mainPos + item.MainBase + gap;
+            }
+
+            // 只有非 Float 元素之后，才应该考虑 Gap/SpaceBetween
+            if (!item.IsFloat)
+            {
+                 // 判断后面是否还有非 Float 元素
+                 bool hasNextNormal = false;
+                 for (int j = i + 1; j < items.Count; j++)
+                 {
+                     if (!items[j].IsFloat)
+                     {
+                         hasNextNormal = true;
+                         break;
+                     }
+                 }
+
+                 if (hasNextNormal && (JustifyContent == JustifyContent.SpaceBetween || JustifyContent == JustifyContent.SpaceAround))
+                 {
+                     cursor += spaceBetween;
+                 }
             }
         }
 
@@ -433,5 +473,6 @@ public class EchoUIPanel : Panel
         public double MarginMainEnd { get; set; }
         public double MarginCrossStart { get; set; }
         public double MarginCrossEnd { get; set; }
+        public bool IsFloat { get; set; }
     }
 }
