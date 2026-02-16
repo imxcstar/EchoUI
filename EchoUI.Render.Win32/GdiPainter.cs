@@ -210,7 +210,7 @@ namespace EchoUI.Render.Win32
                 // Allow wrapping by default
             };
 
-            g.DrawString(element.Text, font, brush, bounds.Location, format);
+            g.DrawString(element.Text, font, brush, bounds, format);
         }
 
         private static void PaintInputBackground(Graphics g, Win32Element element, RectangleF bounds)

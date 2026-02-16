@@ -123,7 +123,7 @@ namespace EchoUI.Core
     /// <summary>
     /// 交叉轴对齐方式（决定子元素在交叉轴上的排列）。
     /// </summary>
-    public enum AlignItems { Start, Center, End }
+    public enum AlignItems { Start, Center, End, Stretch }
     /// <summary>
     /// 边框样式。
     /// </summary>

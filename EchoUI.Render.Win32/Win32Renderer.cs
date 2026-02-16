@@ -72,7 +72,7 @@ namespace EchoUI.Render.Win32
             {
                 case ContainerProps p:
                     element.Direction = p.Direction ?? LayoutDirection.Vertical;
-                    element.FlexShrink = p.FlexShrink ?? 0;
+                    element.FlexShrink = p.FlexShrink ?? 1;
                     element.FlexGrow = p.FlexGrow ?? 0;
                     break;
                 case TextProps:
@@ -210,7 +210,7 @@ namespace EchoUI.Render.Win32
                     element.JustifyContent = propValue is JustifyContent jc ? jc : JustifyContent.Start;
                     break;
                 case nameof(ContainerProps.AlignItems):
-                    element.AlignItems = propValue is AlignItems ai ? ai : AlignItems.Start;
+                    element.AlignItems = propValue is AlignItems ai ? ai : AlignItems.Stretch;
                     break;
                 case nameof(ContainerProps.FlexGrow):
                     element.FlexGrow = propValue is float fg ? fg : 0;

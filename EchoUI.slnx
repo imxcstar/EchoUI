@@ -12,4 +12,7 @@
     <Project Path="EchoUI.Render.Win32/EchoUI.Render.Win32.csproj" />
     <Project Path="EchoUI.Render.Avalonia/EchoUI.Render.Avalonia.csproj" />
   </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="EchoUI.Tools.Serial/EchoUI.Tools.Serial.csproj" />
+  </Folder>
 </Solution>

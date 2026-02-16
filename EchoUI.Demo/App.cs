@@ -81,6 +81,7 @@ public static Element App() {
             Height = Dimension.Percent(100),
             Padding = new Spacing(Dimension.Pixels(20)),
             BackgroundColor = Color.White,
+            Overflow = Overflow.Auto,
             Children =
             [
                 EchoUI.Demo.Elements.MarkdownRenderer(new MarkdownProps

@@ -1,4 +1,6 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using EchoUI.Core;
 
 namespace EchoUI.Render.Win32
@@ -11,6 +13,27 @@ namespace EchoUI.Render.Win32
     /// </summary>
     internal static class FlexLayout
     {
+        // 缓存用于测量的 Graphics 对象，避免重复创建带来的性能开销
+        private static readonly Bitmap _measureBitmap = new(1, 1);
+        private static readonly Graphics _measureGraphics;
+        private static readonly StringFormat _defaultStringFormat;
+
+        static FlexLayout()
+        {
+            _measureGraphics = Graphics.FromImage(_measureBitmap);
+            _measureGraphics.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            _measureGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // 保持与 GdiPainter 一致的 StringFormat 配置
+            _defaultStringFormat = new StringFormat
+            {
+                Alignment = StringAlignment.Near,
+                LineAlignment = StringAlignment.Near,
+                Trimming = StringTrimming.None, // 布局阶段不裁剪，由渲染阶段处理
+                FormatFlags = StringFormatFlags.MeasureTrailingSpaces // 测量包含尾部空格
+            };
+        }
+
         /// <summary>
         /// 从根元素开始计算整棵树的布局
         /// </summary>
@@ -63,6 +86,10 @@ namespace EchoUI.Render.Win32
                 }
                 else
                 {
+                    // FlexGrow > 0 时，标准 Flexbox 行为应该是基于 intrinsic size (flex-basis: auto) 开始增长。
+                    // 之前的实现强制为 0 (flex-basis: 0)，这虽然模仿了 flex: 1 的简写行为，但破坏了 flex-basis: auto。
+                    // 如果用户想要 flex-basis: 0，应该明确设置 Width/Height 为 0。
+                    
                     // 没有显式尺寸 → 测量内容固有尺寸
                     mainBase = isRow
                         ? MeasureIntrinsicWidth(child, contentHeight, vpW, vpH)
@@ -81,19 +108,26 @@ namespace EchoUI.Render.Win32
                 }
                 else
                 {
-                    // 交叉轴默认拉伸填满（stretch），除非是 Text 元素
-                    if (child.ElementType == ElementCoreName.Text)
-                    {
-                        crossBase = isRow
-                            ? MeasureIntrinsicHeight(child, contentWidth, vpW, vpH)
-                            : MeasureIntrinsicWidth(child, contentHeight, vpW, vpH);
-                    }
-                    else
+                    // 只有当 AlignItems 为 Stretch (默认) 时，且子元素没有显式尺寸，才拉伸。
+                    // 注意：Text 元素通常有自己的行高逻辑，但在 Flex 容器中 Stretch 也是合法的，
+                    // 只是绘制时可能不填满。这里我们让布局逻辑符合 Flex 规范。
+                    // 如果 AlignItems 是 Start/Center/End，则使用固有尺寸。
+                    // 默认 null 视为 Stretch
+                    bool isStretch = container.AlignItems == AlignItems.Stretch;
+                    
+                    if (isStretch)
                     {
                         float marginCross = isRow
                             ? margin.Top + margin.Bottom
                             : margin.Left + margin.Right;
-                        crossBase = crossSize - marginCross;
+                        crossBase = Math.Max(0, crossSize - marginCross);
+                    }
+                    else
+                    {
+                        // 非 Stretch，测量固有尺寸
+                        crossBase = isRow
+                            ? MeasureIntrinsicHeight(child, contentWidth, vpW, vpH)
+                            : MeasureIntrinsicWidth(child, contentHeight, vpW, vpH);
                     }
                 }
 
@@ -253,7 +287,7 @@ namespace EchoUI.Render.Win32
 
                 // AlignItems 交叉轴定位
                 float availableCross = crossSize - marginCrossStart - marginCrossEnd;
-                float childCross = Math.Min(item.CrossBase, Math.Max(0, availableCross));
+                float childCross = item.CrossBase;
 
                 float crossPos;
                 switch (container.AlignItems)
@@ -264,7 +298,7 @@ namespace EchoUI.Render.Win32
                     case AlignItems.End:
                         crossPos = marginCrossStart + availableCross - childCross;
                         break;
-                    default:
+                    default: // Start or Stretch (already handled in Sizing)
                         crossPos = marginCrossStart;
                         break;
                 }
@@ -340,6 +374,14 @@ namespace EchoUI.Render.Win32
 
         // --- 尺寸解析 ---
 
+        private static float? ResolveFixedSize(Dimension? dim, float vpW, float vpH)
+        {
+            if (!dim.HasValue) return null;
+            // 在固有尺寸测量阶段，忽略百分比和 Viewport 单位（因为父容器尺寸未知或未传递）
+            if (dim.Value.Unit == DimensionUnit.Percent || dim.Value.Unit == DimensionUnit.ViewportHeight) return null;
+            return dim.Value.Value;
+        }
+
         private static float? ResolveSize(Dimension? dim, float parentSize, float vpW, float vpH)
         {
             if (!dim.HasValue) return null;
@@ -377,7 +419,7 @@ namespace EchoUI.Render.Win32
             foreach (var child in element.Children)
             {
                 if (child.Float) continue;
-                float childW = ResolveSize(child.Width, 0, vpW, vpH)
+                float childW = ResolveFixedSize(child.Width, vpW, vpH)
                                ?? MeasureIntrinsicWidth(child, availableHeight, vpW, vpH);
                 var margin = ResolveSpacing(child.Margin, 0, vpW, vpH);
                 float totalChild = childW + margin.Left + margin.Right;
@@ -423,7 +465,7 @@ namespace EchoUI.Render.Win32
             foreach (var child in element.Children)
             {
                 if (child.Float) continue;
-                float childH = ResolveSize(child.Height, 0, vpW, vpH)
+                float childH = ResolveFixedSize(child.Height, vpW, vpH)
                                ?? MeasureIntrinsicHeight(child, availableWidth, vpW, vpH);
                 var margin = ResolveSpacing(child.Margin, 0, vpW, vpH);
                 float totalChild = childH + margin.Top + margin.Bottom;
@@ -450,31 +492,48 @@ namespace EchoUI.Render.Win32
         {
             if (string.IsNullOrEmpty(element.Text)) return 0;
             float fontSize = element.FontSize > 0 ? element.FontSize : 14;
-            float width = 0;
-            foreach (char c in element.Text)
+
+            lock (_measureGraphics)
             {
-                if (c > 0x7F)
-                    width += fontSize;
-                else
-                    width += fontSize * 0.6f;
+                var fontStyle = FontStyle.Regular;
+                if (element.FontWeight != null)
+                {
+                     var weight = element.FontWeight.ToLower();
+                     if (weight is "bold" or "700" or "800" or "900")
+                         fontStyle = FontStyle.Bold;
+                }
+
+                using var font = new Font(element.FontFamily ?? "Segoe UI", fontSize, fontStyle, GraphicsUnit.Pixel);
+                var size = _measureGraphics.MeasureString(element.Text, font, new PointF(0, 0), _defaultStringFormat);
+                
+                return size.Width;
             }
-            return width + 4;
         }
 
         private static float MeasureTextHeight(Win32Element element, float widthConstraint)
         {
             float fontSize = element.FontSize > 0 ? element.FontSize : 14;
-            float lineHeight = fontSize * 1.4f;
-            
-            if (string.IsNullOrEmpty(element.Text)) return 0;
-            if (widthConstraint <= 0) return lineHeight;
+            // 如果空文本，至少保留一行高度
+            if (string.IsNullOrEmpty(element.Text)) return fontSize * 1.4f;
 
-            float textWidth = MeasureTextWidth(element);
-            if (textWidth <= widthConstraint) return lineHeight;
+            lock (_measureGraphics)
+            {
+                var fontStyle = FontStyle.Regular;
+                if (element.FontWeight != null)
+                {
+                     var weight = element.FontWeight.ToLower();
+                     if (weight is "bold" or "700" or "800" or "900")
+                         fontStyle = FontStyle.Bold;
+                }
 
-            // 简单估算行数
-            int lines = (int)Math.Ceiling(textWidth / widthConstraint);
-            return lines * lineHeight;
+                using var font = new Font(element.FontFamily ?? "Segoe UI", fontSize, fontStyle, GraphicsUnit.Pixel);
+
+                // 如果有宽度约束，传入宽度；否则传入虽大宽度
+                float maxWidth = widthConstraint > 0 ? widthConstraint : 100000f;
+                var size = _measureGraphics.MeasureString(element.Text, font, (int)Math.Ceiling(maxWidth), _defaultStringFormat);
+                
+                return size.Height;
+            }
         }
 
         private static (float Left, float Top, float Right, float Bottom) ResolveSpacing(

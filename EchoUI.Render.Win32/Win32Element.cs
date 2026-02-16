@@ -51,7 +51,7 @@ namespace EchoUI.Render.Win32
         // --- Flex 布局 ---
         public LayoutDirection Direction { get; set; } = LayoutDirection.Vertical;
         public JustifyContent JustifyContent { get; set; } = JustifyContent.Start;
-        public AlignItems AlignItems { get; set; } = AlignItems.Start;
+        public AlignItems AlignItems { get; set; } = AlignItems.Stretch;
         public float FlexGrow { get; set; }
         public float FlexShrink { get; set; }
         public float Gap { get; set; }
