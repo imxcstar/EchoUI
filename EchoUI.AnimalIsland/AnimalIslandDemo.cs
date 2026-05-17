@@ -511,7 +511,6 @@ public static class AnimalIslandDemo
         {
             Width = Dimension.Percent(100),
             FlexGrow = 1,
-            FlexShrink = 1,
             Padding = new Spacing(Dimension.Pixels(30)),
             Direction = LayoutDirection.Vertical,
             Gap = 24,

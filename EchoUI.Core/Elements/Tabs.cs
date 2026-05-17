@@ -124,20 +124,18 @@ namespace EchoUI.Core
             }
 
             // 2. Place all panels into a single wide track.
+            //    CSS-aligned FlexShrink=1 default lets the track shrink with the viewport.
             var contentTrack = Container(new ContainerProps
             {
                 Direction = LayoutDirection.Horizontal,
                 Children = allPanels,
                 Width = Dimension.Percent(100),
                 FlexGrow = 1,
-                FlexShrink = 1,
-                AlignItems = AlignItems.Stretch,
             });
 
             return Container(new ContainerProps
             {
                 Key = props.Key,
-                FlexShrink = 1,
                 Direction = LayoutDirection.Vertical,
                 Children =
                 [
@@ -152,14 +150,12 @@ namespace EchoUI.Core
                         Children = tabHeaders
                     }),
 
-                    // Content Viewport — passes constrained height down to track
+                    // Content Viewport — with CSS FlexShrink=1, constrained height propagates to track
                     Container(new ContainerProps
                     {
                         Children = [contentTrack],
                         FlexGrow = 1,
-                        FlexShrink = 1,
                         Width = Dimension.Percent(100),
-                        AlignItems = AlignItems.Stretch,
                     })
                 ]
             });
