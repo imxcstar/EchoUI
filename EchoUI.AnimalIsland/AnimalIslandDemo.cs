@@ -57,6 +57,7 @@ public static class AnimalIslandDemo
         return Container(new ContainerProps
         {
             Width = Dimension.Percent(100),
+            FlexShrink = 0,
             Padding = new Spacing(Dimension.Pixels(24), Dimension.Pixels(16)),
             Direction = LayoutDirection.Horizontal,
             JustifyContent = JustifyContent.SpaceBetween,

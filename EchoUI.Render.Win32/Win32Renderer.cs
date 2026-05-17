@@ -890,6 +890,7 @@ namespace EchoUI.Render.Win32
             if (_rootElement == null || _window.Hwnd == 0) return;
 
             _layoutValid = false;
+            _layoutCacheGeneration++;
             NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
         }
 

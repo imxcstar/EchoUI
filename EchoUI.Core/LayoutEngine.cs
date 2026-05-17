@@ -389,7 +389,8 @@ public static class LayoutEngine
     {
         var margin = ResolveSpacing(child.Margin, isRow ? contentWidth : contentHeight, vpW, vpH);
         child.LayoutWidth = ResolveSize(child.Width, contentWidth, vpW, vpH) ?? Math.Max(0, contentWidth - margin.Left - margin.Right);
-        child.LayoutHeight = ResolveSize(child.Height, contentHeight, vpW, vpH) ?? 0;
+        var explicitHeight = ResolveSize(child.Height, contentHeight, vpW, vpH);
+        child.LayoutHeight = explicitHeight ?? MeasureIntrinsicHeight(child, child.LayoutWidth, vpW, vpH, measureCacheGeneration, measureText);
         child.LayoutX = isRow ? contentX + cursor + margin.Left : contentX + margin.Left;
         child.LayoutY = isRow ? contentY + margin.Top : contentY + cursor + margin.Top;
         SetAbsoluteFromParent(container, child);

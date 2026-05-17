@@ -144,6 +144,7 @@ namespace EchoUI.Core
                     {
                         Direction = LayoutDirection.Horizontal,
                         Width = Dimension.Percent(100),
+                        FlexShrink = 0,
                         BorderColor = DesignTokens.Border,
                         BorderWidth = 1,
                         BorderStyle = BorderStyle.Solid,
