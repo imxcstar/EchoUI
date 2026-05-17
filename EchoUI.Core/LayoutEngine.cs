@@ -240,7 +240,7 @@ public static class LayoutEngine
                     item.MainBase += freeSpace * (item.Grow / totalGrow);
             }
         }
-        else if (freeSpace < 0 && totalShrink > 0)
+        else if (freeSpace < 0 && totalShrink > 0 && container.Overflow != Overflow.Auto && container.Overflow != Overflow.Scroll)
         {
             foreach (var item in items)
             {

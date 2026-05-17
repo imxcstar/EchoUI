@@ -114,11 +114,12 @@ namespace EchoUI.Core
                     Key = props.Titles[i],
                     Children = [props.Content(i)],
                     Width = Dimension.Percent(currentIndex.Value == i ? 100 : 0),
+                    Direction = LayoutDirection.Vertical,
+                    FlexGrow = 1,
                     Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
                     {
                         [nameof(ContainerProps.Width)] = new(props.AnimationDuration, Easing.EaseInOut)
                     }),
-                    Overflow = Overflow.Hidden
                 }));
             }
 
@@ -128,12 +129,15 @@ namespace EchoUI.Core
                 Direction = LayoutDirection.Horizontal,
                 Children = allPanels,
                 Width = Dimension.Percent(100),
-                FlexGrow = 1
+                FlexGrow = 1,
+                FlexShrink = 1,
+                AlignItems = AlignItems.Stretch,
             });
 
             return Container(new ContainerProps
             {
                 Key = props.Key,
+                FlexShrink = 1,
                 Direction = LayoutDirection.Vertical,
                 Children =
                 [
@@ -148,13 +152,14 @@ namespace EchoUI.Core
                         Children = tabHeaders
                     }),
 
-                    // Content Viewport (acts as a mask for the sliding track)
+                    // Content Viewport — passes constrained height down to track
                     Container(new ContainerProps
                     {
                         Children = [contentTrack],
                         FlexGrow = 1,
+                        FlexShrink = 1,
                         Width = Dimension.Percent(100),
-                        Overflow = Overflow.Hidden
+                        AlignItems = AlignItems.Stretch,
                     })
                 ]
             });

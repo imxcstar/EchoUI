@@ -930,6 +930,11 @@ namespace EchoUI.Render.Win32
             }
 
             LayoutEngine.ComputeLayout(_rootElement, vpW, vpH, _layoutCacheGeneration, MeasureTextForLayout);
+
+#if DEBUG
+            DumpLayoutDiagnostics(_rootElement, vpW, vpH);
+#endif
+
             SyncInstanceLayouts();
             UpdateEditPositions(_rootElement, vpW, vpH);
             CollectFloatingElements();
@@ -1008,6 +1013,48 @@ namespace EchoUI.Render.Win32
                 {
                     CollectFloatingElementsRecursive(child);
                 }
+            }
+        }
+
+        // ──────────────── Layout Diagnostics ────────────────
+
+        [Conditional("DEBUG")]
+        private void DumpLayoutDiagnostics(Win32Element root, float vpW, float vpH)
+        {
+            var logPath = Path.Combine(AppContext.BaseDirectory, "layout_diagnostics.txt");
+            if (File.Exists(logPath)) return; // dump only first layout
+
+            using var w = new StreamWriter(logPath, false);
+            w.WriteLine($"=== EchoUI Layout Diagnostics (viewport {vpW}x{vpH}) ===");
+            w.WriteLine($"LayoutDefaults: FlexShrink={LayoutDefaults.FlexShrink}, Overflow={LayoutDefaults.Overflow}, AlignItems={LayoutDefaults.AlignItems}, Direction={LayoutDefaults.Direction}");
+            w.WriteLine();
+            DumpElementTree(root, "", w);
+        }
+
+        private static void DumpElementTree(Win32Element e, string indent, StreamWriter w)
+        {
+            var ovf = e.Overflow;
+            var maxScrollY = Math.Max(0, e.CachedContentHeight - e.LayoutHeight);
+            var scrollY = e.ScrollOffsetY;
+            var key = e.OwnerInstance?.Element.Props.Key;
+            var text = e.Text;
+            var label = key != null ? $"[{key}]" : text != null ? $"\"{(text.Length <= 40 ? text : text[..40] + "...")}\"" : "";
+
+            w.WriteLine(
+                $"{indent}{e.ElementType} {label}" +
+                $"  size=({e.LayoutWidth:F1}x{e.LayoutHeight:F1})" +
+                $"  content=({e.CachedContentWidth:F1}x{e.CachedContentHeight:F1})" +
+                $"  overflow={ovf}" +
+                $"  flexShrink={e.FlexShrink}" +
+                $"  flexGrow={e.FlexGrow}" +
+                $"  direction={e.Direction}" +
+                $"  alignItems={e.AlignItems}" +
+                (maxScrollY > 0 ? $"  ⭐ maxScrollY={maxScrollY:F1}" : "") +
+                (scrollY != 0 ? $"  scrollY={scrollY:F1}" : ""));
+
+            foreach (var child in e.Children)
+            {
+                DumpElementTree(child, indent + "  ", w);
             }
         }
 

@@ -178,6 +178,7 @@ namespace EchoUI.Core
 
                 foreach (var childElement in element.Props.Children)
                 {
+                    if (childElement == null) continue; // defensive: skip null children
                     var childInstance = new ComponentInstance(childElement, instance, this);
                     instance.Children.Add(childInstance);
                     await MountInstance(childInstance);
