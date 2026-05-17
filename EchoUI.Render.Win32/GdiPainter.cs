@@ -47,23 +47,28 @@ namespace EchoUI.Render.Win32
 
                 if (rootInstance != null)
                 {
+                    // 主树：通过声明式命令管道
                     var commands = PaintEngine.GenerateCommands(rootInstance);
                     if (commands.Count > 0)
                     {
                         Win32CommandExecutor.Execute(hdc, commands);
                     }
 
-                    PaintOverlayElement(hdc, root, paintRect, floatingElements);
+                    // Input/img 溢出区域叠加
+                    PaintOverlayInputsAndImages(hdc, root, paintRect, floatingElements);
+
+                    // Float 层：通过 PaintEngine + Win32CommandExecutor
                     if (floatingElements != null)
                     {
                         foreach (var floatElem in floatingElements)
                         {
-                            PaintElement(hdc, floatElem, paintRect, null);
+                            RenderFloatTree(hdc, floatElem, paintRect);
                         }
                     }
                 }
                 else
                 {
+                    // === 回退路径（无 ComponentInstance 时）===
                     PaintElement(hdc, root, paintRect, floatingElements);
 
                     if (floatingElements != null)
@@ -198,7 +203,11 @@ namespace EchoUI.Render.Win32
             ExecutePaintCommands(hdc, element, bounds, ResolveInputBackgroundPaintElement(element, effectiveBorderColor));
         }
 
-        private static void PaintOverlayElement(nint hdc, Win32Element element, RectF clipRect, IReadOnlyCollection<Win32Element>? skippedElements)
+        /// <summary>
+        /// 渲染溢出裁剪区域内的 Input 背景和 img。
+        /// 这些元素被 PaintEngine 跳过，需要单独在此层绘制。
+        /// </summary>
+        private static void PaintOverlayInputsAndImages(nint hdc, Win32Element element, RectF clipRect, IReadOnlyCollection<Win32Element>? skippedElements)
         {
             if (skippedElements != null && skippedElements.Contains(element))
                 return;
@@ -241,7 +250,7 @@ namespace EchoUI.Render.Win32
 
                 foreach (var child in element.Children)
                 {
-                    PaintOverlayElement(hdc, child, childClip, skippedElements);
+                    PaintOverlayInputsAndImages(hdc, child, childClip, skippedElements);
                 }
             }
             finally
@@ -258,6 +267,128 @@ namespace EchoUI.Render.Win32
                 PaintScrollbar(hdc, element, bounds);
             }
         }
+
+        /// <summary>
+        /// 递归渲染 Float 元素树（下拉菜单、弹出层等）。
+        /// 通过 PaintEngine.AddElementCommands 生成命令，经 Win32CommandExecutor 执行。
+        /// img 类型保留直接 GDI 绘制。
+        /// </summary>
+        private static void RenderFloatTree(nint hdc, Win32Element element, RectF clipRect)
+        {
+            var bounds = element.GetAbsoluteBounds();
+            if (bounds.Right < clipRect.Left || bounds.Left > clipRect.Right ||
+                bounds.Bottom < clipRect.Top || bounds.Top > clipRect.Bottom)
+            {
+                if (element.Overflow != Overflow.Visible || element.Children.Count == 0)
+                    return;
+            }
+
+            // img 特殊处理（直接 GDI）
+            if (element.ElementType == "img")
+            {
+                PaintImage(hdc, element, bounds);
+            }
+            else
+            {
+                // 其余类型通过 PaintEngine 生成命令
+                var commands = new List<RenderCommand>();
+                AddFloatElementCommands(element, ToLayoutBox(bounds), commands);
+                if (commands.Count > 0)
+                    Win32CommandExecutor.Execute(hdc, commands);
+            }
+
+            // 裁剪
+            var clipChanged = false;
+            var previousClip = s_effectiveClipRect;
+            if (element.Overflow != Overflow.Visible)
+            {
+                var clipRegion = RectF.Intersect(bounds, clipRect);
+                if (clipRegion.Width <= 0 || clipRegion.Height <= 0)
+                    return;
+                Win32CommandExecutor.ExecuteSingle(hdc, new PushClip(ToLayoutBox(clipRegion)));
+                s_effectiveClipRect = clipRegion;
+                clipChanged = true;
+            }
+
+            // 子元素
+            var childClip = clipChanged ? s_effectiveClipRect : clipRect;
+            foreach (var child in element.Children)
+            {
+                if (child.Float) continue; // Float 子元素由顶层单独渲染
+                RenderFloatTree(hdc, child, childClip);
+            }
+
+            // 恢复裁剪
+            if (clipChanged)
+            {
+                s_effectiveClipRect = previousClip;
+                Win32CommandExecutor.ExecuteSingle(hdc, new PopClip());
+            }
+
+            // 滚动条
+            if (element.Overflow is Overflow.Auto or Overflow.Scroll)
+                PaintScrollbar(hdc, element, bounds);
+        }
+
+        /// <summary>将 Win32Element 属性转换为 PaintEngine 命令</summary>
+        private static void AddFloatElementCommands(Win32Element element, LayoutBox layout, List<RenderCommand> commands)
+        {
+            switch (element.ElementType)
+            {
+                case ElementCoreName.Container:
+                case "" or null:
+                    commands.AddRange(PaintEngine.GenerateCommands(
+                        new Element(ElementCoreName.Container, new ContainerProps
+                        {
+                            BackgroundColor = element.BackgroundColor,
+                            BorderColor = element.BorderColor,
+                            BorderStyle = element.BorderStyle,
+                            BorderWidth = element.BorderWidth,
+                            BorderRadius = element.BorderRadius,
+                            Shadow = element.Shadow,
+                        }),
+                        layout));
+                    break;
+
+                case ElementCoreName.Text:
+                    commands.AddRange(PaintEngine.GenerateCommands(
+                        new Element(ElementCoreName.Text, new TextProps
+                        {
+                            Text = element.Text ?? string.Empty,
+                            FontFamily = element.FontFamily,
+                            FontSize = element.FontSize > 0 ? (float?)element.FontSize : null,
+                            Color = element.TextColor,
+                            FontWeight = element.FontWeight,
+                            MouseThrough = element.MouseThrough,
+                            NoWrap = element.NoWrap,
+                        }),
+                        layout));
+                    break;
+
+                case ElementCoreName.Input:
+                    var effectiveBorderColor = element.IsFocused && element.FocusedBorderColor.HasValue
+                        ? element.FocusedBorderColor
+                        : element.BorderColor;
+                    commands.AddRange(PaintEngine.GenerateCommands(
+                        new Element(ElementCoreName.Container, new ContainerProps
+                        {
+                            BackgroundColor = element.BackgroundColor,
+                            BorderColor = effectiveBorderColor,
+                            BorderStyle = effectiveBorderColor.HasValue ? Core.BorderStyle.Solid : Core.BorderStyle.None,
+                            BorderWidth = effectiveBorderColor.HasValue ? 1f : 0f,
+                            BorderRadius = 0,
+                        }),
+                        layout));
+                    break;
+            }
+        }
+
+        /// <summary>将 RectF 转换为 LayoutBox</summary>
+        private static LayoutBox ToLayoutBox(RectF bounds) => new(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+
+        // ===================================================================
+        // 以下为回退路径（rootInstance == null 时使用），正常情况下不会执行。
+        // ===================================================================
 
         private static void ExecutePaintCommands(nint hdc, Win32Element element, RectF bounds, Element paintElement)
         {
@@ -330,15 +461,10 @@ namespace EchoUI.Render.Win32
             });
         }
 
-        private static LayoutBox ToLayoutBox(RectF bounds)
-        {
-            return new LayoutBox(bounds.X, bounds.Y, bounds.Width, bounds.Height);
-        }
-
         private static void PaintScrollbar(nint hdc, Win32Element element, RectF bounds)
         {
-            var contentWidth = FlexLayout.MeasureContentWidth(element, bounds.Width, bounds.Height);
-            var contentHeight = FlexLayout.MeasureContentHeight(element, bounds.Width, bounds.Height);
+            var contentWidth = LayoutEngine.MeasureContentWidth(element);
+            var contentHeight = LayoutEngine.MeasureContentHeight(element);
             var alwaysShow = element.Overflow == Overflow.Scroll;
             var showVertical = alwaysShow || contentHeight > element.LayoutHeight;
             var showHorizontal = alwaysShow || contentWidth > element.LayoutWidth;

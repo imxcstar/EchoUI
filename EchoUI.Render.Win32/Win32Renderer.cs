@@ -249,6 +249,12 @@ namespace EchoUI.Render.Win32
             return GdiText.MeasureText(request.Text, request.FontFamily, request.FontSize ?? 14f, request.FontWeight);
         }
 
+        private static TextMeasurementResult MeasureTextForLayout(Win32Element element, float? widthConstraint, bool noWrap)
+        {
+            var fontSize = element.FontSize > 0 ? element.FontSize : 14f;
+            return GdiText.MeasureText(element.Text, element.FontFamily, fontSize, element.FontWeight, widthConstraint, noWrap);
+        }
+
         public Task<string> ReadClipboardTextAsync()
         {
             return Task.FromResult(ReadClipboardText());
@@ -904,7 +910,7 @@ namespace EchoUI.Render.Win32
                 return;
             }
 
-            FlexLayout.UpdateAbsoluteLayout(scrollTarget);
+            LayoutEngine.UpdateAbsoluteLayout(scrollTarget);
             SyncInstanceLayouts();
             UpdateEditPositions(scrollTarget, vpW, vpH);
             RequestRepaint(scrollTarget);
@@ -923,7 +929,7 @@ namespace EchoUI.Render.Win32
                 _layoutCacheGeneration++;
             }
 
-            FlexLayout.ComputeLayout(_rootElement, vpW, vpH, _layoutCacheGeneration);
+            LayoutEngine.ComputeLayout(_rootElement, vpW, vpH, _layoutCacheGeneration, MeasureTextForLayout);
             SyncInstanceLayouts();
             UpdateEditPositions(_rootElement, vpW, vpH);
             CollectFloatingElements();

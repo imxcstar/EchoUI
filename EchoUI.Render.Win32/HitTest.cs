@@ -207,8 +207,8 @@ namespace EchoUI.Render.Win32
 
             if (scrollTarget != null)
             {
-                float contentWidth = FlexLayout.MeasureContentWidth(scrollTarget, vpW, vpH);
-                float contentHeight = FlexLayout.MeasureContentHeight(scrollTarget, vpW, vpH);
+                float contentWidth = LayoutEngine.MeasureContentWidth(scrollTarget);
+                float contentHeight = LayoutEngine.MeasureContentHeight(scrollTarget);
                 float maxScrollX = Math.Max(0, contentWidth - scrollTarget.LayoutWidth);
                 float maxScrollY = Math.Max(0, contentHeight - scrollTarget.LayoutHeight);
                 bool scrollHorizontal = (NativeInterop.GetKeyState(NativeInterop.VK_SHIFT) & 0x8000) != 0 || maxScrollY <= 0;
