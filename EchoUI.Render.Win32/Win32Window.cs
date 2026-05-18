@@ -502,11 +502,6 @@ namespace EchoUI.Render.Win32
         {
             int delta = NativeInterop.GET_WHEEL_DELTA_WPARAM(wParam);
 
-            // 获取鼠标在客户区的坐标
-            NativeInterop.GetClientRect(hWnd, out var rect);
-            float vpW = rect.Width;
-            float vpH = rect.Height;
-
             // WM_MOUSEWHEEL 的坐标是屏幕坐标，需要转换
             var screenPoint = new NativeInterop.POINT
             {
@@ -518,7 +513,7 @@ namespace EchoUI.Render.Win32
             if (_renderer?.RootElement != null)
             {
                 _renderer.HitTestManager.HandleMouseWheel(
-                    _renderer.RootElement, screenPoint.X, screenPoint.Y, delta, vpW, vpH);
+                    _renderer.RootElement, screenPoint.X, screenPoint.Y, delta);
             }
         }
 

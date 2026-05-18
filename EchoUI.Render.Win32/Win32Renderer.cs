@@ -14,7 +14,7 @@ namespace EchoUI.Render.Win32
         private readonly Win32Window _window;
         private Win32Element? _rootElement;
         private Win32UpdateScheduler? _scheduler;
-        private HitTestManager? _hitTestManager;
+        private HitTestManager<Win32Element>? _hitTestManager;
         private readonly List<Win32Element> _floatingElements = [];
         private readonly Win32AnimationManager _animationManager;
         private ComponentInstance? _rootInstance;
@@ -41,12 +41,26 @@ namespace EchoUI.Render.Win32
         internal Win32Element? RootElement => _rootElement;
         internal ComponentInstance? RootInstance => _rootInstance;
         internal Win32UpdateScheduler? Scheduler => _scheduler;
-        internal HitTestManager HitTestManager => _hitTestManager!;
+        internal HitTestManager<Win32Element> HitTestManager => _hitTestManager!;
 
         public Win32Renderer(Win32Window window)
         {
             _window = window;
-            _hitTestManager = new HitTestManager(this);
+            _hitTestManager = new HitTestManager<Win32Element>(new HitTestPlatform<Win32Element>
+            {
+                GetFloatingElements = () => _floatingElements,
+                RequestRepaint = (a, b) =>
+                {
+                    if (a == null && b == null) return;
+                    if (a != null) InvalidateElementBounds(a);
+                    if (b != null && !ReferenceEquals(a, b)) InvalidateElementBounds(b);
+                },
+                RequestRelayout = RequestRelayout,
+                FocusWindow = FocusWindow,
+                IsWindowValid = hwnd => NativeInterop.IsWindow(hwnd),
+                SetNativeFocus = hwnd => NativeInterop.SetFocus(hwnd),
+                IsShiftKeyDown = () => (NativeInterop.GetKeyState(NativeInterop.VK_SHIFT) & 0x8000) != 0
+            });
             _animationManager = new Win32AnimationManager(window, this);
             window.SetRenderer(this);
         }
