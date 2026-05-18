@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -50,7 +50,7 @@ namespace EchoUI.Render.Win32
                     // 主树：通过命令管道绘制，但样式读取 Win32Element 当前值。
                     // 动画每帧更新的是 Win32Element；如果直接从声明式 Props 生成命令，
                     // BackgroundColor / BorderColor / BorderRadius 会读取到目标值，表现为先硬切换再动画。
-                    var commands = GenerateNativeBackedCommands(rootInstance);
+                    var commands = GenerateNativeBackedCommands(rootInstance, paintRect);
                     if (commands.Count > 0)
                     {
                         Win32CommandExecutor.Execute(hdc, commands);
@@ -293,7 +293,8 @@ namespace EchoUI.Render.Win32
             else
             {
                 // 其余类型通过 PaintEngine 生成命令
-                var commands = PaintEngine.GenerateCommands(element, ToLayoutBox(bounds));
+                var commands = new List<RenderCommand>(4);
+                PaintEngine.AppendCommands(element, ToLayoutBox(bounds), commands);
                 if (commands.Count > 0)
                     Win32CommandExecutor.Execute(hdc, commands);
             }
@@ -332,14 +333,14 @@ namespace EchoUI.Render.Win32
         }
 
         /// <summary>从实例树生成绘制命令，布局取实例，样式取 Win32Element 当前值。</summary>
-        private static List<RenderCommand> GenerateNativeBackedCommands(ComponentInstance root)
+        private static List<RenderCommand> GenerateNativeBackedCommands(ComponentInstance root, RectF paintRect)
         {
-            var commands = new List<RenderCommand>();
-            AddNativeBackedInstanceCommands(root, commands);
+            var commands = new List<RenderCommand>(256);
+            AddNativeBackedInstanceCommands(root, commands, paintRect);
             return commands;
         }
 
-        private static void AddNativeBackedInstanceCommands(ComponentInstance instance, List<RenderCommand> commands)
+        private static void AddNativeBackedInstanceCommands(ComponentInstance instance, List<RenderCommand> commands, RectF paintRect)
         {
             var native = instance.NativeElement as Win32Element;
             var layout = instance.Layout;
@@ -348,6 +349,15 @@ namespace EchoUI.Render.Win32
             var isFloat = instance.Element.Type.IsNative
                 && props is ContainerProps { Float: true };
             if (isFloat)
+            {
+                return;
+            }
+
+            var nativeBounds = native != null && layout.HasValue
+                ? new RectF(layout.Value.X, layout.Value.Y, layout.Value.Width, layout.Value.Height)
+                : (RectF?)null;
+            var intersectsPaint = nativeBounds == null || Intersects(nativeBounds.Value, paintRect);
+            if (!intersectsPaint && native != null && (native.Overflow != Overflow.Visible || native.Children.Count == 0))
             {
                 return;
             }
@@ -363,13 +373,14 @@ namespace EchoUI.Render.Win32
                     native.TransformOrigin));
             }
 
-            if (native != null && layout.HasValue)
+            if (native != null && layout.HasValue && intersectsPaint)
             {
                 switch (native.ElementType)
                 {
                     case ElementCoreName.Container:
                     case ElementCoreName.Text:
-                        commands.AddRange(PaintEngine.GenerateCommands(native, layout.Value));
+                    case ElementCoreName.Input:
+                        PaintEngine.AppendCommands(native, layout.Value, commands);
                         break;
                 }
             }
@@ -385,7 +396,7 @@ namespace EchoUI.Render.Win32
 
             foreach (var child in instance.Children)
             {
-                AddNativeBackedInstanceCommands(child, commands);
+                AddNativeBackedInstanceCommands(child, commands, paintRect);
             }
 
             if (shouldClip)
@@ -397,6 +408,11 @@ namespace EchoUI.Render.Win32
             {
                 commands.Add(new PopTransform());
             }
+        }
+
+        private static bool Intersects(RectF a, RectF b)
+        {
+            return a.Right >= b.Left && a.Left <= b.Right && a.Bottom >= b.Top && a.Top <= b.Bottom;
         }
 
         /// <summary>将 RectF 转换为 LayoutBox</summary>

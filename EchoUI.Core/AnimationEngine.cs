@@ -26,6 +26,7 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
 {
     private readonly IAnimationTargetAdapter<TTarget> _adapter;
     private readonly List<ActiveAnimation> _animations = [];
+    private readonly HashSet<TTarget> _dirtyTargets = new(ReferenceEqualityComparer<TTarget>.Instance);
 
     public AnimationEngine(IAnimationTargetAdapter<TTarget> adapter)
     {
@@ -58,6 +59,7 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
             ToValue = toValue,
             DurationMs = Math.Max(1, transition.DurationMs),
             Easing = transition.Easing,
+            Impact = _adapter.GetPropertyImpact(propertyName),
             ElapsedMs = 0
         });
     }
@@ -92,18 +94,20 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
         var hasUpdates = false;
         var needsRelayout = false;
         var needsFullRepaint = false;
-        HashSet<TTarget>? dirtyTargets = null;
+        _dirtyTargets.Clear();
 
-        for (var i = _animations.Count - 1; i >= 0; i--)
+        var writeIndex = 0;
+        var count = _animations.Count;
+
+        for (var readIndex = 0; readIndex < count; readIndex++)
         {
-            var animation = _animations[i];
+            var animation = _animations[readIndex];
             animation.ElapsedMs += deltaMs;
 
             var t = animation.ElapsedMs / animation.DurationMs;
             if (t >= 1.0)
             {
                 _adapter.SetPropertyValue(animation.Target, animation.PropertyName, animation.ToValue);
-                _animations.RemoveAt(i);
                 hasUpdates = true;
             }
             else
@@ -111,10 +115,11 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
                 var easedT = AnimationValueInterpolator.ApplyEasing((float)t, animation.Easing);
                 var current = AnimationValueInterpolator.Interpolate(animation.FromValue, animation.ToValue, easedT);
                 _adapter.SetPropertyValue(animation.Target, animation.PropertyName, current);
+                _animations[writeIndex++] = animation;
                 hasUpdates = true;
             }
 
-            switch (_adapter.GetPropertyImpact(animation.PropertyName))
+            switch (animation.Impact)
             {
                 case AnimationPropertyImpact.Relayout:
                     needsRelayout = true;
@@ -123,17 +128,21 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
                     needsFullRepaint = true;
                     break;
                 case AnimationPropertyImpact.ElementRepaint:
-                    dirtyTargets ??= new HashSet<TTarget>(ReferenceEqualityComparer<TTarget>.Instance);
-                    dirtyTargets.Add(animation.Target);
+                    _dirtyTargets.Add(animation.Target);
                     break;
             }
+        }
+
+        if (writeIndex < count)
+        {
+            _animations.RemoveRange(writeIndex, count - writeIndex);
         }
 
         return new AnimationUpdateResult<TTarget>(
             hasUpdates,
             needsRelayout,
             needsFullRepaint,
-            dirtyTargets is { Count: > 0 } ? dirtyTargets : Array.Empty<TTarget>());
+            _dirtyTargets.Count > 0 ? _dirtyTargets : Array.Empty<TTarget>());
     }
 
     private sealed class ActiveAnimation
@@ -144,6 +153,7 @@ public sealed class AnimationEngine<TTarget> where TTarget : class
         public object? ToValue { get; init; }
         public double DurationMs { get; init; }
         public Easing Easing { get; init; }
+        public AnimationPropertyImpact Impact { get; init; }
         public double ElapsedMs { get; set; }
     }
 }
@@ -174,16 +184,27 @@ public static class AnimationValueInterpolator
         return easing switch
         {
             Easing.Linear => t,
-            Easing.Ease => t < 0.5f
-                ? 4f * t * t * t
-                : 1f - (float)Math.Pow(-2f * t + 2f, 3) / 2f,
+            Easing.Ease => EaseInOutCubic(t),
             Easing.EaseIn => t * t * t,
-            Easing.EaseOut => 1f - (float)Math.Pow(1f - t, 3),
-            Easing.EaseInOut => t < 0.5f
-                ? 4f * t * t * t
-                : 1f - (float)Math.Pow(-2f * t + 2f, 3) / 2f,
+            Easing.EaseOut => EaseOutCubic(t),
+            Easing.EaseInOut => EaseInOutCubic(t),
             _ => t
         };
+    }
+
+    private static float EaseOutCubic(float t)
+    {
+        var inv = 1f - t;
+        return 1f - inv * inv * inv;
+    }
+
+    private static float EaseInOutCubic(float t)
+    {
+        if (t < 0.5f)
+            return 4f * t * t * t;
+
+        var x = -2f * t + 2f;
+        return 1f - x * x * x / 2f;
     }
 
     public static bool ValuesEqual(object? a, object? b)

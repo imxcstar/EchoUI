@@ -31,7 +31,7 @@ public static class PaintEngine
     public static List<RenderCommand> GenerateCommands<TNode>(TNode root, Func<TNode, bool>? skipSubtree = null)
         where TNode : RenderNode<TNode>
     {
-        var list = new List<RenderCommand>();
+        var list = new List<RenderCommand>(128);
         AddRenderNodeTreeCommands(root, list, skipSubtree);
         return list;
     }
@@ -40,9 +40,16 @@ public static class PaintEngine
     public static List<RenderCommand> GenerateCommands<TNode>(TNode node, LayoutBox layout)
         where TNode : RenderNode<TNode>
     {
-        var list = new List<RenderCommand>();
+        var list = new List<RenderCommand>(4);
         AddRenderNodeCommands(node, layout, list);
         return list;
+    }
+
+    /// <summary>把单个 RenderNode 的绘制命令追加到现有列表，避免每个节点创建临时 List。</summary>
+    public static void AppendCommands<TNode>(TNode node, LayoutBox layout, List<RenderCommand> list)
+        where TNode : RenderNode<TNode>
+    {
+        AddRenderNodeCommands(node, layout, list);
     }
 
     private static void AddTreeCommands(Element el, Func<Element, LayoutBox?> resolveLayout, List<RenderCommand> list)
