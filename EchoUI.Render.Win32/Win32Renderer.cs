@@ -537,6 +537,12 @@ namespace EchoUI.Render.Win32
 
         internal void RequestScrollReposition(Win32Element scrollTarget, float previousScrollX, float previousScrollY)
         {
+            if (SmoothScrollEnabled)
+            {
+                _animationManager.StartScrollAnimation(scrollTarget, previousScrollX, previousScrollY);
+                return;
+            }
+
             ApplyScrollReposition(scrollTarget);
         }
 
