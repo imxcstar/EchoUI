@@ -21,6 +21,7 @@ public static class Showcase
         ("Cards",      "🃏", "cards",      CardsPage),
         ("Counter",    "🔢", "counter",    CounterPage),
         ("Markdown",   "📝", "markdown",   MarkdownPage),
+        ("Diagnostics", "🧪", "diagnostics", DiagnosticsPage),
     ];
 
     // ═══════════════════════════════════════════════════════
@@ -1733,6 +1734,117 @@ Built with ❤️ using **EchoUI** + **Markdig**.
                     })
                 ])
             ]
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  Diagnostics Page
+    // ═══════════════════════════════════════════════════════
+
+    private static Element DiagnosticsPage()
+    {
+        var (shouldThrow, setShouldThrow, _) = State(false);
+
+        return Container(new ContainerProps
+        {
+            Width = Dimension.Percent(100),
+            Direction = LayoutDirection.Vertical,
+            Gap = 24,
+            AlignItems = AlignItems.Stretch,
+            Children =
+            [
+                Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 4, Children =
+                [
+                    SectionTitle("Diagnostics"),
+                    Subtitle("Click the button to intentionally throw during UI conversion and verify EchoUI prints the element stack.")
+                ]}),
+
+                Card("UI Error Diagnostics",
+                [
+                    Text(new TextProps
+                    {
+                        Text = "这个页面会在多层组件 / 容器内部故意抛出异常。控制台和 Debug 输出应包含 EchoUIRenderException、原始异常，以及从根组件到出错元素的元素栈。",
+                        Color = C.TextSecondary,
+                        FontSize = 13,
+                        NoWrap = false
+                    }),
+                    Button(new ButtonProps
+                    {
+                        Text = shouldThrow.Value ? "Exception armed" : "Throw during render",
+                        BackgroundColor = C.Error,
+                        TextColor = Color.White,
+                        Width = Dimension.Pixels(180),
+                        Height = Dimension.Pixels(40),
+                        OnClick = _ => setShouldThrow(true)
+                    }),
+                    Create((Component)DiagnosticsOuter, new Props
+                    {
+                        Key = "diagnostics-outer",
+                        Children = [Create((Component)DiagnosticsMiddle, new DiagnosticMiddleProps { Key = "middle-component", ShouldThrow = shouldThrow.Value })]
+                    })
+                ])
+            ]
+        });
+    }
+
+    private static Element DiagnosticsOuter(Props props)
+    {
+        return Container(new ContainerProps
+        {
+            Key = "outer-container",
+            BackgroundColor = C.InputBg,
+            BorderColor = C.Border,
+            BorderStyle = BorderStyle.Solid,
+            BorderWidth = 1,
+            BorderRadius = 10,
+            Padding = new Spacing(Dimension.Pixels(16)),
+            Direction = LayoutDirection.Vertical,
+            Gap = 10,
+            Children =
+            [
+                Text(new TextProps { Text = "Outer diagnostic wrapper", Color = Color.White, FontWeight = "700" }),
+                .. props.Children
+            ]
+        });
+    }
+
+    private sealed record DiagnosticMiddleProps : Props
+    {
+        public bool ShouldThrow { get; init; }
+    }
+
+    private static Element DiagnosticsMiddle(Props props)
+    {
+        var middleProps = (DiagnosticMiddleProps)props;
+        return Container(new ContainerProps
+        {
+            Key = "middle-container",
+            BackgroundColor = Color.FromHex("#0F172A"),
+            BorderRadius = 8,
+            Padding = new Spacing(Dimension.Pixels(14)),
+            Children = [Create((Component)DiagnosticsBomb, new DiagnosticBombProps { Key = "bomb-component", ShouldThrow = middleProps.ShouldThrow })]
+        });
+    }
+
+    private sealed record DiagnosticBombProps : Props
+    {
+        public bool ShouldThrow { get; init; }
+    }
+
+    private static Element DiagnosticsBomb(Props props)
+    {
+        var bombProps = (DiagnosticBombProps)props;
+        if (bombProps.ShouldThrow)
+        {
+            throw new InvalidOperationException("Intentional EchoUI diagnostics test exception.");
+        }
+
+        return Text(new TextProps
+        {
+            Text = "Diagnostics component is healthy. Click the button above to trigger the test exception.",
+            Color = C.Success,
+            FontSize = 13,
+            NoWrap = false
         });
     }
 

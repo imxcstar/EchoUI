@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace EchoUI.Core
@@ -49,32 +51,41 @@ namespace EchoUI.Core
 
         public async Task Mount(Delegate rootComponentDelegate)
         {
-            var methodInfo = rootComponentDelegate.Method;
-            Element? rootElement;
+            try
+            {
+                var methodInfo = rootComponentDelegate.Method;
+                Element? rootElement;
 
-            if (methodInfo.ReturnType.IsAssignableTo(typeof(Task)))
-            {
-                var asyncComponent = (AsyncComponent)Delegate.CreateDelegate(typeof(AsyncComponent), rootComponentDelegate.Target, methodInfo);
-                rootElement = new Element(asyncComponent, new RootProps());
-            }
-            else
-            {
-                var component = (Component)Delegate.CreateDelegate(typeof(Component), rootComponentDelegate.Target, methodInfo);
-                rootElement = new Element(component, new RootProps());
-            }
+                if (methodInfo.ReturnType.IsAssignableTo(typeof(Task)))
+                {
+                    var asyncComponent = (AsyncComponent)Delegate.CreateDelegate(typeof(AsyncComponent), rootComponentDelegate.Target, methodInfo);
+                    rootElement = new Element(asyncComponent, new RootProps());
+                }
+                else
+                {
+                    var component = (Component)Delegate.CreateDelegate(typeof(Component), rootComponentDelegate.Target, methodInfo);
+                    rootElement = new Element(component, new RootProps());
+                }
 
-            _rootInstance = new ComponentInstance(rootElement, null, this);
-            if (_renderer is IInstanceBindingRenderer bindingRenderer)
-            {
-                bindingRenderer.AttachRootInstance(_rootInstance);
-            }
+                _rootInstance = new ComponentInstance(rootElement, null, this);
+                if (_renderer is IInstanceBindingRenderer bindingRenderer)
+                {
+                    bindingRenderer.AttachRootInstance(_rootInstance);
+                }
 
-            var rendered = await RenderComponent(_rootInstance, _rootInstance.Element.Props);
-            if (rendered != null)
+                var rendered = await RenderComponent(_rootInstance, _rootInstance.Element.Props);
+                if (rendered != null)
+                {
+                    var childInstance = new ComponentInstance(rendered, _rootInstance, this);
+                    _rootInstance.Children.Add(childInstance);
+                    await MountInstance(childInstance);
+                }
+            }
+            catch (Exception ex)
             {
-                var childInstance = new ComponentInstance(rendered, _rootInstance, this);
-                _rootInstance.Children.Add(childInstance);
-                await MountInstance(childInstance);
+                var diagnosticException = CreateDiagnosticException("mounting root component", _rootInstance, ex);
+                ReportDiagnosticException(diagnosticException);
+                throw diagnosticException;
             }
         }
 
@@ -84,7 +95,19 @@ namespace EchoUI.Core
             if (!_isUpdateQueued)
             {
                 _isUpdateQueued = true;
-                _scheduler.Schedule(ProcessUpdates);
+                _scheduler.Schedule(async () =>
+                {
+                    try
+                    {
+                        await ProcessUpdates();
+                    }
+                    catch (Exception ex)
+                    {
+                        var diagnosticException = CreateDiagnosticException("processing scheduled UI updates", instance, ex);
+                        ReportDiagnosticException(diagnosticException);
+                        throw diagnosticException;
+                    }
+                });
             }
         }
 
@@ -132,8 +155,15 @@ namespace EchoUI.Core
                         if (!instance.HasCompletedInitialRender)
                         {
                             instance.IsAsyncPlaceholder = true;
-                            renderTask.ContinueWith(_ =>
+                            _ = renderTask.ContinueWith(task =>
                             {
+                                if (task.Exception != null)
+                                {
+                                    var diagnosticException = CreateDiagnosticException("rendering async component", instance, task.Exception.GetBaseException());
+                                    ReportDiagnosticException(diagnosticException);
+                                    throw diagnosticException;
+                                }
+
                                 instance.HasCompletedInitialRender = true;
                                 ScheduleUpdate(instance);
                             }, TaskScheduler.FromCurrentSynchronizationContext());
@@ -147,6 +177,10 @@ namespace EchoUI.Core
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                throw CreateDiagnosticException("rendering component", instance, ex);
+            }
             finally
             {
                 Hooks.Context = oldContext;
@@ -156,8 +190,10 @@ namespace EchoUI.Core
 
         private async Task MountInstance(ComponentInstance instance)
         {
-            var element = instance.Element;
-            var elementType = element.Type;
+            try
+            {
+                var element = instance.Element;
+                var elementType = element.Type;
 
             if (elementType.IsNative)
             {
@@ -194,12 +230,19 @@ namespace EchoUI.Core
                     await MountInstance(childInstance);
                 }
             }
+            }
+            catch (Exception ex)
+            {
+                throw CreateDiagnosticException("mounting element", instance, ex);
+            }
         }
 
         private async Task UpdateInstance(ComponentInstance instance)
         {
-            var element = instance.Element;
-            var elementType = element.Type;
+            try
+            {
+                var element = instance.Element;
+                var elementType = element.Type;
 
             if (elementType.IsNative)
             {
@@ -232,11 +275,18 @@ namespace EchoUI.Core
                     }
                 }
             }
+            }
+            catch (Exception ex)
+            {
+                throw CreateDiagnosticException("updating element", instance, ex);
+            }
         }
 
         private async Task DiffInstance(ComponentInstance instance, Element newElement)
         {
-            var oldElement = instance.Element;
+            try
+            {
+                var oldElement = instance.Element;
 
             if (!ElementTypesMatch(oldElement.Type, newElement.Type))
             {
@@ -273,6 +323,11 @@ namespace EchoUI.Core
             else
             {
                 await UpdateInstance(instance);
+            }
+            }
+            catch (Exception ex)
+            {
+                throw CreateDiagnosticException("diffing element", instance, ex);
             }
         }
 
@@ -403,7 +458,9 @@ namespace EchoUI.Core
 
         private async Task DiffChildren(ComponentInstance parent, IReadOnlyList<Element> newChildElements)
         {
-            var oldChildren = parent.Children.ToList();
+            try
+            {
+                var oldChildren = parent.Children.ToList();
             var newChildren = new List<ComponentInstance>();
             var newInstancesCreated = new List<ComponentInstance>();
 
@@ -493,6 +550,11 @@ namespace EchoUI.Core
                     }
                 }
             }
+            }
+            catch (Exception ex)
+            {
+                throw CreateDiagnosticException("diffing children", parent, ex);
+            }
         }
 
         private object GetParentContainer(ComponentInstance instance)
@@ -572,6 +634,82 @@ namespace EchoUI.Core
                 _rootInstance.Element = _rootInstance.Element with { Type = newType };
                 ScheduleUpdate(_rootInstance);
             }
+        }
+
+        private static EchoUIRenderException CreateDiagnosticException(string operation, ComponentInstance? instance, Exception exception)
+        {
+            if (exception is EchoUIRenderException echoException)
+            {
+                return echoException;
+            }
+
+            return new EchoUIRenderException(operation, BuildElementStack(instance), exception);
+        }
+
+        private static void ReportDiagnosticException(EchoUIRenderException exception)
+        {
+            const string markerKey = "EchoUI.DiagnosticLogged";
+            if (exception.Data.Contains(markerKey))
+            {
+                return;
+            }
+
+            exception.Data[markerKey] = true;
+            Console.Error.WriteLine(exception.ToString());
+            Debug.WriteLine(exception.ToString());
+        }
+
+        private static string BuildElementStack(ComponentInstance? instance)
+        {
+            if (instance == null)
+            {
+                return "  <no component instance available>";
+            }
+
+            var stack = new Stack<ComponentInstance>();
+            for (var current = instance; current != null; current = current.Parent)
+            {
+                stack.Push(current);
+            }
+
+            var sb = new StringBuilder();
+            var depth = 0;
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                sb.Append("  ");
+                sb.Append(new string(' ', depth * 2));
+                sb.Append("at ");
+                sb.Append(DescribeElement(current.Element));
+                sb.AppendLine();
+                depth++;
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+
+        private static string DescribeElement(Element element)
+        {
+            var name = DescribeElementType(element.Type);
+            var key = element.Props.Key;
+            return key == null ? name : $"{name} key=\"{key}\"";
+        }
+
+        private static string DescribeElementType(ElementType type)
+        {
+            if (type.IsNative)
+            {
+                return type.AsNativeType;
+            }
+
+            var method = type.AsComponentDelegate?.Method;
+            if (method == null)
+            {
+                return "<unknown component>";
+            }
+
+            var declaringType = method.DeclaringType?.Name;
+            return string.IsNullOrEmpty(declaringType) ? method.Name : $"{declaringType}.{method.Name}";
         }
 
         private record class RootProps : Props;
