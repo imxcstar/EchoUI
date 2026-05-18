@@ -8,7 +8,7 @@ namespace EchoUI.Render.Win32
     /// <summary>
     /// Win32 动画引擎：驱动 ContainerProps.Transitions 声明的属性过渡动画。
     /// 通过 WM_TIMER 驱动逐帧插值，每帧更新 Win32Element 属性并触发重绘。
-    /// 支持插值类型：Color?, float, Dimension?, Spacing?
+    /// 支持插值类型：Color?, float, Dimension?, Spacing?, Transform, TransformOrigin
     /// </summary>
     internal class Win32AnimationManager
     {
@@ -176,6 +176,7 @@ namespace EchoUI.Render.Win32
 
             bool anyUpdated = false;
             bool needsRelayout = false;
+            bool needsFullRepaint = false;
             HashSet<Win32Element>? dirtyElements = null;
 
             for (int i = _animations.Count - 1; i >= 0; i--)
@@ -203,6 +204,10 @@ namespace EchoUI.Render.Win32
                 {
                     needsRelayout = true;
                 }
+                else if (NeedsFullRepaint(anim.PropertyName))
+                {
+                    needsFullRepaint = true;
+                }
                 else
                 {
                     dirtyElements ??= [];
@@ -216,6 +221,10 @@ namespace EchoUI.Render.Win32
             if (needsRelayout)
             {
                 _renderer.RequestAnimationRelayout();
+            }
+            else if (needsFullRepaint)
+            {
+                _renderer.RequestRepaint();
             }
             else if (dirtyElements != null)
             {
@@ -242,6 +251,8 @@ namespace EchoUI.Render.Win32
                 int iv => iv + (int)(((int)to - iv) * t),
                 Dimension d => LerpDimension(d, (Dimension)to, t),
                 Spacing spacing => LerpSpacing(spacing, (Spacing)to, t),
+                Transform transform => LerpTransform(transform, (Transform)to, t),
+                TransformOrigin origin => LerpTransformOrigin(origin, (TransformOrigin)to, t),
                 _ => t >= 1f ? to : from
             };
         }
@@ -280,6 +291,70 @@ namespace EchoUI.Render.Win32
             );
         }
 
+        private static TransformOrigin LerpTransformOrigin(TransformOrigin from, TransformOrigin to, float t)
+        {
+            return new TransformOrigin(
+                LerpFloat(from.X, to.X, t),
+                LerpFloat(from.Y, to.Y, t));
+        }
+
+        private static Transform LerpTransform(Transform from, Transform to, float t)
+        {
+            var fromFunctions = from.Functions ?? [];
+            var toFunctions = to.Functions ?? [];
+
+            if (fromFunctions.Length == 0 && toFunctions.Length > 0)
+                fromFunctions = CreateIdentityFunctionsLike(toFunctions);
+            else if (toFunctions.Length == 0 && fromFunctions.Length > 0)
+                toFunctions = CreateIdentityFunctionsLike(fromFunctions);
+
+            if (fromFunctions.Length != toFunctions.Length)
+                return t >= 1f ? to : from;
+
+            var result = new TransformFunction[fromFunctions.Length];
+            for (int i = 0; i < fromFunctions.Length; i++)
+            {
+                var interpolated = LerpTransformFunction(fromFunctions[i], toFunctions[i], t);
+                if (interpolated == null)
+                    return t >= 1f ? to : from;
+
+                result[i] = interpolated;
+            }
+
+            return new Transform(result);
+        }
+
+        private static TransformFunction[] CreateIdentityFunctionsLike(TransformFunction[] functions)
+        {
+            var result = new TransformFunction[functions.Length];
+            for (int i = 0; i < functions.Length; i++)
+            {
+                result[i] = functions[i] switch
+                {
+                    TranslateTransform => new TranslateTransform(0, 0),
+                    ScaleTransform => new ScaleTransform(1, 1),
+                    RotateTransform => new RotateTransform(0),
+                    SkewTransform => new SkewTransform(0, 0),
+                    _ => functions[i]
+                };
+            }
+            return result;
+        }
+
+        private static TransformFunction? LerpTransformFunction(TransformFunction from, TransformFunction to, float t)
+        {
+            return (from, to) switch
+            {
+                (TranslateTransform a, TranslateTransform b) => new TranslateTransform(LerpFloat(a.X, b.X, t), LerpFloat(a.Y, b.Y, t)),
+                (ScaleTransform a, ScaleTransform b) => new ScaleTransform(LerpFloat(a.X, b.X, t), LerpFloat(a.Y, b.Y, t)),
+                (RotateTransform a, RotateTransform b) => new RotateTransform(LerpFloat(a.AngleDeg, b.AngleDeg, t)),
+                (SkewTransform a, SkewTransform b) => new SkewTransform(LerpFloat(a.XDeg, b.XDeg, t), LerpFloat(a.YDeg, b.YDeg, t)),
+                _ => null
+            };
+        }
+
+        private static float LerpFloat(float from, float to, float t) => from + (to - from) * t;
+
         private static float ApplyEasing(float t, Easing easing)
         {
             return easing switch
@@ -317,6 +392,8 @@ namespace EchoUI.Render.Win32
                 nameof(Win32Element.MaxWidth) => element.MaxWidth,
                 nameof(Win32Element.MaxHeight) => element.MaxHeight,
                 nameof(Win32Element.Gap) => element.Gap,
+                nameof(Win32Element.Transform) => element.Transform,
+                nameof(Win32Element.TransformOrigin) => element.TransformOrigin,
                 _ => null
             };
         }
@@ -367,6 +444,12 @@ namespace EchoUI.Render.Win32
                 case nameof(Win32Element.Gap):
                     element.Gap = value is float gap ? gap : 0;
                     break;
+                case nameof(Win32Element.Transform):
+                    element.Transform = value is Transform transform ? transform : new Transform();
+                    break;
+                case nameof(Win32Element.TransformOrigin):
+                    element.TransformOrigin = value is TransformOrigin origin ? origin : TransformOrigin.Center;
+                    break;
             }
         }
 
@@ -390,12 +473,40 @@ namespace EchoUI.Render.Win32
             };
         }
 
+        private static bool NeedsFullRepaint(string propName)
+        {
+            return propName switch
+            {
+                nameof(Win32Element.Transform) => true,
+                nameof(Win32Element.TransformOrigin) => true,
+                _ => false
+            };
+        }
+
         private static bool ValuesEqual(object? a, object? b)
         {
             if (a == null && b == null) return true;
             if (a == null || b == null) return false;
             if (ReferenceEquals(a, b)) return true;
+
+            if (a is Transform ta && b is Transform tb)
+                return TransformsEqual(ta, tb);
+
             return a.Equals(b);
+        }
+
+        private static bool TransformsEqual(Transform a, Transform b)
+        {
+            var af = a.Functions ?? [];
+            var bf = b.Functions ?? [];
+            if (af.Length != bf.Length) return false;
+
+            for (int i = 0; i < af.Length; i++)
+            {
+                if (!Equals(af[i], bf[i])) return false;
+            }
+
+            return true;
         }
 
         /// <summary>

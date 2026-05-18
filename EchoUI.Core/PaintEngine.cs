@@ -32,9 +32,17 @@ public static class PaintEngine
         var layout = resolveLayout(el);
         if (!layout.HasValue) return;
 
+        bool hasTransform = el.Props is ContainerProps cp && cp.Transform.HasValue && !cp.Transform.Value.IsEmpty;
+        if (hasTransform)
+        {
+            var t = ((ContainerProps)el.Props).Transform!.Value;
+            var origin = ((ContainerProps)el.Props).TransformOrigin ?? TransformOrigin.Center;
+            list.Add(new PushTransform(layout.Value, t, origin));
+        }
+
         AddElementCommands(el, layout.Value, list);
 
-        var shouldClip = el.Props is ContainerProps cp && (cp.Overflow ?? Overflow.Visible) != Overflow.Visible;
+        var shouldClip = el.Props is ContainerProps cp2 && (cp2.Overflow ?? Overflow.Visible) != Overflow.Visible;
         if (shouldClip)
         {
             list.Add(new PushClip(layout.Value));
@@ -49,6 +57,11 @@ public static class PaintEngine
         {
             list.Add(new PopClip());
         }
+
+        if (hasTransform)
+        {
+            list.Add(new PopTransform());
+        }
     }
 
     private static void AddInstanceTreeCommands(ComponentInstance instance, List<RenderCommand> list)
@@ -58,6 +71,18 @@ public static class PaintEngine
         if (isFloat)
         {
             return;
+        }
+
+        bool hasTransform = instance.Element.Type.IsNative
+            && instance.Layout.HasValue
+            && instance.Element.Props is ContainerProps cp3
+            && cp3.Transform.HasValue && !cp3.Transform.Value.IsEmpty;
+
+        if (hasTransform)
+        {
+            var t = ((ContainerProps)instance.Element.Props).Transform!.Value;
+            var origin = ((ContainerProps)instance.Element.Props).TransformOrigin ?? TransformOrigin.Center;
+            list.Add(new PushTransform(instance.Layout!.Value, t, origin));
         }
 
         if (instance.Element.Type.IsNative && instance.Layout.HasValue)
@@ -71,8 +96,8 @@ public static class PaintEngine
 
         var shouldClip = instance.Element.Type.IsNative
             && instance.Layout.HasValue
-            && instance.Element.Props is ContainerProps cp
-            && (cp.Overflow ?? Overflow.Visible) != Overflow.Visible;
+            && instance.Element.Props is ContainerProps clp
+            && (clp.Overflow ?? Overflow.Visible) != Overflow.Visible;
 
         if (shouldClip)
         {
@@ -87,6 +112,11 @@ public static class PaintEngine
         if (shouldClip)
         {
             list.Add(new PopClip());
+        }
+
+        if (hasTransform)
+        {
+            list.Add(new PopTransform());
         }
     }
 

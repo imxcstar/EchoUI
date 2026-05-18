@@ -399,4 +399,60 @@ namespace EchoUI.Core
         public static implicit operator ValueDictionary<TKey, TValue>(Dictionary<TKey, TValue> dictionary) =>
             new(dictionary);
     }
+
+    // ──────────────── CSS Transform ────────────────
+
+    /// <summary>变换函数基类</summary>
+    public abstract record TransformFunction;
+
+    /// <summary>平移：translate(x, y)，单位为像素</summary>
+    public sealed record TranslateTransform(float X, float Y) : TransformFunction
+    {
+        public static TranslateTransform Pixels(float x, float y) => new(x, y);
+    }
+
+    /// <summary>缩放：scale(x, y)，1.0 = 原始大小</summary>
+    public sealed record ScaleTransform(float X, float Y) : TransformFunction
+    {
+        public static ScaleTransform Uniform(float s) => new(s, s);
+    }
+
+    /// <summary>旋转：rotate(angle)，单位为角度</summary>
+    public sealed record RotateTransform(float AngleDeg) : TransformFunction;
+
+    /// <summary>倾斜：skew(xDeg, yDeg)，单位为角度</summary>
+    public sealed record SkewTransform(float XDeg, float YDeg) : TransformFunction
+    {
+        public static SkewTransform X(float deg) => new(deg, 0);
+        public static SkewTransform Y(float deg) => new(0, deg);
+    }
+
+    /// <summary>CSS Transform 值：一组有序的变换函数，按数组顺序应用</summary>
+    public readonly record struct Transform
+    {
+        public TransformFunction[] Functions { get; init; }
+
+        public bool IsEmpty => Functions == null || Functions.Length == 0;
+
+        public Transform(params TransformFunction[] functions) => Functions = functions;
+
+        public static implicit operator Transform(TransformFunction[] functions) => new(functions);
+    }
+
+    /// <summary>
+    /// transform-origin：变换的原点，以元素自身尺寸的比例表示。
+    /// (0f, 0f) = 左上角，(0.5f, 0.5f) = 中心，(1f, 1f) = 右下角。
+    /// </summary>
+    public readonly record struct TransformOrigin(float X, float Y)
+    {
+        public static TransformOrigin Center => new(0.5f, 0.5f);
+        public static TransformOrigin TopLeft => new(0f, 0f);
+        public static TransformOrigin TopRight => new(1f, 0f);
+        public static TransformOrigin BottomLeft => new(0f, 1f);
+        public static TransformOrigin BottomRight => new(1f, 1f);
+        public static TransformOrigin TopCenter => new(0.5f, 0f);
+        public static TransformOrigin BottomCenter => new(0.5f, 1f);
+        public static TransformOrigin LeftCenter => new(0f, 0.5f);
+        public static TransformOrigin RightCenter => new(1f, 0.5f);
+    }
 }

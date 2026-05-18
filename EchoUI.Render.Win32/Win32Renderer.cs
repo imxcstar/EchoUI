@@ -371,6 +371,12 @@ namespace EchoUI.Render.Win32
                 case nameof(ContainerProps.Opacity):
                     element.Opacity = propValue is float op ? op : 1f;
                     break;
+                case nameof(ContainerProps.Transform):
+                    element.Transform = propValue is Transform transform ? transform : new Transform();
+                    break;
+                case nameof(ContainerProps.TransformOrigin):
+                    element.TransformOrigin = propValue is TransformOrigin origin ? origin : TransformOrigin.Center;
+                    break;
                 case nameof(ContainerProps.Cursor):
                     element.Cursor = propValue as string;
                     break;

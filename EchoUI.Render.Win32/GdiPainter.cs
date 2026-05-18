@@ -47,8 +47,10 @@ namespace EchoUI.Render.Win32
 
                 if (rootInstance != null)
                 {
-                    // 主树：通过声明式命令管道
-                    var commands = PaintEngine.GenerateCommands(rootInstance);
+                    // 主树：通过命令管道绘制，但样式读取 Win32Element 当前值。
+                    // 动画每帧更新的是 Win32Element；如果直接从声明式 Props 生成命令，
+                    // BackgroundColor / BorderColor / BorderRadius 会读取到目标值，表现为先硬切换再动画。
+                    var commands = GenerateNativeBackedCommands(rootInstance);
                     if (commands.Count > 0)
                     {
                         Win32CommandExecutor.Execute(hdc, commands);
@@ -292,7 +294,7 @@ namespace EchoUI.Render.Win32
             {
                 // 其余类型通过 PaintEngine 生成命令
                 var commands = new List<RenderCommand>();
-                AddFloatElementCommands(element, ToLayoutBox(bounds), commands);
+                AddWin32ElementCommands(element, ToLayoutBox(bounds), commands);
                 if (commands.Count > 0)
                     Win32CommandExecutor.Execute(hdc, commands);
             }
@@ -330,8 +332,76 @@ namespace EchoUI.Render.Win32
                 PaintScrollbar(hdc, element, bounds);
         }
 
-        /// <summary>将 Win32Element 属性转换为 PaintEngine 命令</summary>
-        private static void AddFloatElementCommands(Win32Element element, LayoutBox layout, List<RenderCommand> commands)
+        /// <summary>从实例树生成绘制命令，布局取实例，样式取 Win32Element 当前值。</summary>
+        private static List<RenderCommand> GenerateNativeBackedCommands(ComponentInstance root)
+        {
+            var commands = new List<RenderCommand>();
+            AddNativeBackedInstanceCommands(root, commands);
+            return commands;
+        }
+
+        private static void AddNativeBackedInstanceCommands(ComponentInstance instance, List<RenderCommand> commands)
+        {
+            var native = instance.NativeElement as Win32Element;
+            var layout = instance.Layout;
+            var props = instance.Element.Props;
+
+            var isFloat = instance.Element.Type.IsNative
+                && props is ContainerProps { Float: true };
+            if (isFloat)
+            {
+                return;
+            }
+
+            var hasTransform = native != null
+                && layout.HasValue
+                && !native.Transform.IsEmpty;
+
+            if (hasTransform)
+            {
+                commands.Add(new PushTransform(layout!.Value,
+                    native!.Transform,
+                    native.TransformOrigin));
+            }
+
+            if (native != null && layout.HasValue)
+            {
+                switch (native.ElementType)
+                {
+                    case ElementCoreName.Container:
+                    case ElementCoreName.Text:
+                        AddWin32ElementCommands(native, layout.Value, commands);
+                        break;
+                }
+            }
+
+            var shouldClip = native != null
+                && layout.HasValue
+                && native.Overflow != Overflow.Visible;
+
+            if (shouldClip)
+            {
+                commands.Add(new PushClip(layout!.Value));
+            }
+
+            foreach (var child in instance.Children)
+            {
+                AddNativeBackedInstanceCommands(child, commands);
+            }
+
+            if (shouldClip)
+            {
+                commands.Add(new PopClip());
+            }
+
+            if (hasTransform)
+            {
+                commands.Add(new PopTransform());
+            }
+        }
+
+        /// <summary>将 Win32Element 当前属性转换为 PaintEngine 命令</summary>
+        private static void AddWin32ElementCommands(Win32Element element, LayoutBox layout, List<RenderCommand> commands)
         {
             switch (element.ElementType)
             {
@@ -1044,6 +1114,63 @@ namespace EchoUI.Render.Win32
                 NativeInterop.GdipFlush(s_graphics, NativeInterop.FlushIntentionFlush);
                 s_needsFlush = false;
             }
+        }
+
+        /// <summary>根据 Transform 列表和元素包围盒构建 GDI+ Matrix，原点在 origin。</summary>
+        public static nint BuildTransformMatrix(RectF layout, Transform transform, TransformOrigin origin)
+        {
+            if (NativeInterop.GdipCreateMatrix(out var matrix) != NativeInterop.GdipOk)
+                return 0;
+
+            // 原点（相对于元素左上角）
+            float ox = layout.X + layout.Width * origin.X;
+            float oy = layout.Y + layout.Height * origin.Y;
+
+            // GDI+ 使用 Append 时，围绕某个元素原点变换的顺序应为：
+            // 1) 先把元素原点平移到世界坐标原点；
+            // 2) 应用 scale/rotate/skew 等变换；
+            // 3) 再平移回元素原点。
+            // 之前这里使用了相反的 +/- origin 顺序，会让旋转/缩放围绕窗口坐标系绕行，
+            // 视觉上就像组件脱离自身位置、在整个 UI 里画圆弧。
+            NativeInterop.GdipTranslateMatrix(matrix, -ox, -oy, NativeInterop.MatrixOrderAppend);
+
+            foreach (var fn in transform.Functions)
+            {
+                switch (fn)
+                {
+                    case TranslateTransform t:
+                        NativeInterop.GdipTranslateMatrix(matrix, t.X, t.Y, NativeInterop.MatrixOrderAppend);
+                        break;
+                    case ScaleTransform s:
+                        NativeInterop.GdipScaleMatrix(matrix, s.X, s.Y, NativeInterop.MatrixOrderAppend);
+                        break;
+                    case RotateTransform r:
+                        NativeInterop.GdipRotateMatrix(matrix, r.AngleDeg, NativeInterop.MatrixOrderAppend);
+                        break;
+                    case SkewTransform k:
+                        NativeInterop.GdipShearMatrix(matrix,
+                            (float)Math.Tan(k.XDeg * Math.PI / 180.0),
+                            (float)Math.Tan(k.YDeg * Math.PI / 180.0),
+                            NativeInterop.MatrixOrderAppend);
+                        break;
+                }
+            }
+
+            NativeInterop.GdipTranslateMatrix(matrix, ox, oy, NativeInterop.MatrixOrderAppend);
+
+            return matrix;
+        }
+
+        public static void SetWorldTransform(nint matrix)
+        {
+            if (s_graphics != 0 && matrix != 0)
+                NativeInterop.GdipSetWorldTransform(s_graphics, matrix);
+        }
+
+        public static void ResetWorldTransform()
+        {
+            if (s_graphics != 0)
+                NativeInterop.GdipResetWorldTransform(s_graphics);
         }
 
         private static bool MarkDrawn(int status)

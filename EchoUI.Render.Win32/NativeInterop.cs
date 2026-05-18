@@ -572,6 +572,37 @@ namespace EchoUI.Render.Win32
         [DllImport("gdiplus.dll")]
         public static extern int GdipRestoreGraphics(nint graphics, uint state);
 
+        // ── GDI+ Matrix (Transform) ──
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipCreateMatrix(out nint matrix);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipDeleteMatrix(nint matrix);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipTranslateMatrix(nint matrix, float offsetX, float offsetY, int order);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipScaleMatrix(nint matrix, float scaleX, float scaleY, int order);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipRotateMatrix(nint matrix, float angle, int order);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipShearMatrix(nint matrix, float shearX, float shearY, int order);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipMultiplyMatrix(nint matrix, nint matrix2, int order);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipSetWorldTransform(nint graphics, nint matrix);
+
+        [DllImport("gdiplus.dll")]
+        public static extern int GdipResetWorldTransform(nint graphics);
+
+        public const int MatrixOrderPrepend = 0;
+        public const int MatrixOrderAppend = 1;
+
         [DllImport("gdiplus.dll")]
         public static extern int GdipSetClipRect(nint graphics, float x, float y, float width, float height, int combineMode);
 

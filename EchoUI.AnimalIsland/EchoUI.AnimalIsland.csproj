@@ -8,9 +8,17 @@
 		<PublishAot>true</PublishAot>
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<StackTraceSupport>false</StackTraceSupport>
+		<!-- 可选：进一步裁剪 LINQ 等框架特性（.NET 10+ 更安全） -->
+		<UseSizeOptimizedLinq>true</UseSizeOptimizedLinq>
+		<!-- 更激进的体积优化（.NET 8+ 支持） -->
+		<OptimizationPreference>Size</OptimizationPreference>
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Core\EchoUI.Core.csproj" />
 		<ProjectReference Include="..\EchoUI.Render.Win32\EchoUI.Render.Win32.csproj" />
+		<ProjectReference Include="..\EchoUI.Demo\EchoUI.Demo.csproj" />
 	</ItemGroup>
 </Project>

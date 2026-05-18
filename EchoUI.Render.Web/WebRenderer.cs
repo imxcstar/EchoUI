@@ -1,4 +1,4 @@
-﻿using EchoUI.Core;
+using EchoUI.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -143,6 +143,10 @@ namespace EchoUI.Render.Web
                     domPatch.Attributes["data-eui-float-auto-width"] = containerProps.Float && !containerProps.Width.HasValue ? "true" : "false";
                     domPatch.Styles["flex-shrink"] = containerProps.FlexShrink.HasValue ? containerProps.FlexShrink.Value.ToString() : "0";
                     domPatch.Styles["flex-grow"] = containerProps.FlexGrow.HasValue ? containerProps.FlexGrow.Value.ToString() : "0";
+                    if (containerProps.Transform.HasValue)
+                        domPatch.Styles["transform"] = ToCss(containerProps.Transform);
+                    if (containerProps.TransformOrigin.HasValue)
+                        domPatch.Styles["transform-origin"] = ToCss(containerProps.TransformOrigin);
 
                     var hasImeHandler = containerProps.OnTextComposition != null;
                     var hasKeyboardHandler = HasKeyboardHandler(containerProps);
@@ -292,6 +296,8 @@ namespace EchoUI.Render.Web
                             break;
                         case nameof(ContainerProps.OnFocus): domPatch.UpdateEvent("focus", propValue); break;
                         case nameof(ContainerProps.OnBlur): domPatch.UpdateEvent("blur", propValue); break;
+                        case nameof(ContainerProps.Transform): domPatch.SetStyle("transform", ToCss(propValue as Transform?)); break;
+                        case nameof(ContainerProps.TransformOrigin): domPatch.SetStyle("transform-origin", ToCss(propValue as TransformOrigin?)); break;
                         default:
                             break;
                     }
@@ -423,8 +429,36 @@ namespace EchoUI.Render.Web
             nameof(ContainerProps.BorderRadius) => "border-radius",
             nameof(ContainerProps.Shadow) => "box-shadow",
             nameof(ContainerProps.Gap) => "gap",
+            nameof(ContainerProps.Transform) => "transform",
+            nameof(ContainerProps.TransformOrigin) => "transform-origin",
             _ => null
         };
+
+        private string? ToCss(TransformOrigin? origin)
+        {
+            if (origin == null) return null;
+            var o = origin.Value;
+            return $"{(o.X * 100f):0.#}% {(o.Y * 100f):0.#}%";
+        }
+
+        private string? ToCss(Transform? transform)
+        {
+            if (transform == null || transform.Value.IsEmpty) return "none";
+            var sb = new StringBuilder();
+            foreach (var fn in transform.Value.Functions)
+            {
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(fn switch
+                {
+                    TranslateTransform t => $"translate({t.X}px,{t.Y}px)",
+                    ScaleTransform s => $"scale({s.X},{s.Y})",
+                    RotateTransform r => $"rotate({r.AngleDeg}deg)",
+                    SkewTransform k => $"skew({k.XDeg}deg,{k.YDeg}deg)",
+                    _ => ""
+                });
+            }
+            return sb.ToString();
+        }
 
         private string ToCss(Easing easing) => easing switch
         {

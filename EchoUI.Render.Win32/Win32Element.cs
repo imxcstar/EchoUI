@@ -85,6 +85,8 @@ namespace EchoUI.Render.Win32
         public float BorderRadius { get; set; }
         public BoxShadow Shadow { get; set; } = BoxShadow.None;
         public float Opacity { get; set; } = 1f;
+        public Transform Transform { get; set; } = new();
+        public TransformOrigin TransformOrigin { get; set; } = TransformOrigin.Center;
         public string? Cursor { get; set; }
 
         // --- 文本属性 (Text 元素) ---

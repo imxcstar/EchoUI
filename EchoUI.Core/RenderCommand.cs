@@ -23,3 +23,12 @@ public sealed record PopClip : RenderCommand
 {
     public PopClip() : base(LayoutBox.Zero) { }
 }
+
+/// <summary>应用 CSS Transform（translate/rotate/scale/skew）</summary>
+public sealed record PushTransform(LayoutBox Layout, Transform Transform, TransformOrigin Origin) : RenderCommand(Layout);
+
+/// <summary>恢复 Transform</summary>
+public sealed record PopTransform : RenderCommand
+{
+    public PopTransform() : base(LayoutBox.Zero) { }
+}

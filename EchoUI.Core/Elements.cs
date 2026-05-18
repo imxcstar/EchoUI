@@ -175,6 +175,10 @@ namespace EchoUI.Core
         public string? Cursor { get; init; }
         /// <summary>元素透明度</summary>
         public float? Opacity { get; init; }
+        /// <summary>CSS transform</summary>
+        public Transform? Transform { get; init; }
+        /// <summary>CSS transform-origin（值为元素宽高的比例，0..1）</summary>
+        public TransformOrigin? TransformOrigin { get; init; }
     }
 
     /// <summary>
