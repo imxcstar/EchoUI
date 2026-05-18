@@ -1,3 +1,5 @@
+using EchoUI.Core.Text;
+
 namespace EchoUI.Core;
 
 /// <summary>绘制命令抽象基类</summary>
@@ -6,8 +8,32 @@ public abstract record RenderCommand(LayoutBox Layout);
 /// <summary>填充色块（含圆角）</summary>
 public sealed record DrawRect(LayoutBox Layout, Color? BackgroundColor, float BorderRadius) : RenderCommand(Layout);
 
-/// <summary>绘制文本</summary>
-public sealed record DrawText(LayoutBox Layout, string Text, Color Color, string? FontFamily, float FontSize, string? FontWeight, bool NoWrap = true) : RenderCommand(Layout);
+/// <summary>绘制文本：后端使用 Core.Text 布局引擎测绘后逐片段渲染。</summary>
+public sealed record DrawText(
+    LayoutBox Layout,
+    string Text,
+    Color Color,
+    string? FontFamily,
+    float FontSize,
+    string? FontWeight,
+    bool NoWrap = true,
+    int MaxLines = 0,
+    TextTrimming Trimming = TextTrimming.CharacterEllipsis,
+    float? LineHeight = null,
+    float LetterSpacing = 0) : RenderCommand(Layout)
+{
+    public TextStyle CreateStyle() => new(FontFamily, FontSize, FontWeight, Color, LetterSpacing, LineHeight);
+
+    public TextLayoutOptions CreateLayoutOptions() => new(
+        Math.Max(0, Layout.Width),
+        NoWrap,
+        MaxLines,
+        Trimming,
+        LineHeight);
+}
+
+/// <summary>已完成布局的文本绘制命令，可供后端或测试直接复用。</summary>
+public sealed record DrawTextLayout(LayoutBox Layout, TextLayoutResult TextLayout) : RenderCommand(Layout);
 
 /// <summary>绘制边框</summary>
 public sealed record DrawBorder(LayoutBox Layout, Color Color, float Width, float Radius, BorderStyle Style) : RenderCommand(Layout);

@@ -1,4 +1,5 @@
 using EchoUI.Core;
+using EchoUI.Core.Text;
 
 namespace EchoUI.Render.Win32;
 
@@ -10,6 +11,8 @@ internal static class Win32CommandExecutor
 
     [ThreadStatic]
     private static Stack<nint>? s_transformMatrices;
+
+    private static readonly ITextRunMeasurer TextMeasurer = new CachingTextRunMeasurer(new GdiTextRunMeasurer());
 
     public static void ExecuteSingle(nint hdc, RenderCommand cmd, Win32Element? element = null)
     {
@@ -66,13 +69,11 @@ internal static class Win32CommandExecutor
                 break;
 
             case DrawText d:
-                {
-                    GdiPlus.Flush();
-                    var tc = element?.TextColor ?? d.Color;
-                    var fs = element != null && element.FontSize > 0 ? element.FontSize : d.FontSize;
-                    GdiText.DrawText(hdc, d.Text, d.FontFamily, fs, d.FontWeight, tc,
-                        new RectF(d.Layout.X, d.Layout.Y, d.Layout.Width, d.Layout.Height), d.NoWrap);
-                }
+                DrawTextCommand(hdc, d, element);
+                break;
+
+            case DrawTextLayout d:
+                DrawTextLayoutCommand(hdc, d.Layout, d.TextLayout, element?.TextColor);
                 break;
 
             case PushClip c:
@@ -121,6 +122,47 @@ internal static class Win32CommandExecutor
                     NativeInterop.RestoreDC(hdc, -1);
                 }
                 break;
+        }
+    }
+
+    private static void DrawTextCommand(nint hdc, DrawText command, Win32Element? element)
+    {
+        GdiPlus.Flush();
+
+        var color = element?.TextColor ?? command.Color;
+        var fontSize = element != null && element.FontSize > 0 ? element.FontSize : command.FontSize;
+        var fontFamily = element?.FontFamily ?? command.FontFamily;
+        var fontWeight = element?.FontWeight ?? command.FontWeight;
+        var style = new TextStyle(fontFamily, fontSize, fontWeight, color, command.LetterSpacing, command.LineHeight);
+        var options = new TextLayoutOptions(
+            Math.Max(0, command.Layout.Width),
+            command.NoWrap,
+            command.MaxLines,
+            command.Trimming,
+            command.LineHeight);
+        var layout = TextLayoutEngine.LayoutPlain(command.Text, style, options, TextMeasurer);
+        DrawTextLayoutCommand(hdc, command.Layout, layout, null);
+    }
+
+    private static void DrawTextLayoutCommand(nint hdc, LayoutBox bounds, TextLayoutResult layout, Color? overrideColor)
+    {
+        GdiPlus.Flush();
+
+        foreach (var line in layout.Lines)
+        {
+            foreach (var fragment in line.Fragments)
+            {
+                if (string.IsNullOrEmpty(fragment.Text) || fragment.Width <= 0)
+                    continue;
+
+                var rect = new RectF(
+                    bounds.X + line.X + fragment.X,
+                    bounds.Y + line.Y,
+                    Math.Max(1, fragment.Width + 1),
+                    Math.Max(1, line.Height));
+                var color = overrideColor ?? fragment.Style.Color;
+                GdiText.DrawText(hdc, fragment.Text, fragment.Style.FontFamily, fragment.Style.EffectiveFontSize, fragment.Style.FontWeight, color, rect, noWrap: true);
+            }
         }
     }
 

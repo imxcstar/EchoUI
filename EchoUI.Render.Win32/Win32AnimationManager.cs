@@ -12,7 +12,7 @@ internal sealed class Win32AnimationManager
     private readonly Win32Renderer _renderer;
     private readonly AnimationEngine<Win32Element> _engine;
     private readonly Dictionary<Win32Element, ScrollAnimationState> _scrollAnimations = [];
-    private const uint TimerIntervalMs = 16;
+    private const uint TimerIntervalMs = 2;
 
     private nint _timerId;
     private bool _timerRunning;
