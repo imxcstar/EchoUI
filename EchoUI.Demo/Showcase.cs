@@ -158,6 +158,7 @@ public static class Showcase
 
         return Container(new ContainerProps
         {
+            Key = $"main-content-{activeId}",
             FlexGrow = 1,
             FlexShrink = 1,
             Height = Dimension.Percent(100),

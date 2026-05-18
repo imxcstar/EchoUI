@@ -72,4 +72,10 @@ namespace EchoUI.Core
         void BindNativeElement(object nativeElement, ComponentInstance instance);
         void UnbindNativeElement(object nativeElement);
     }
+
+    public interface IElementStateRenderer
+    {
+        void SaveElementState(object nativeElement, string stateKey);
+        void RestoreElementState(object nativeElement, string stateKey);
+    }
 }

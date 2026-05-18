@@ -63,6 +63,10 @@ public record struct HitTestPlatform<TNode> where TNode : class, IHitTestNode<TN
     public Action<TNode?, TNode?> RequestRepaint { get; init; }
     /// <summary>请求重新布局并重绘</summary>
     public Action RequestRelayout { get; init; }
+    /// <summary>请求滚动容器仅更新绝对坐标并重绘，避免滚动时全量重布局；参数为滚动前的 X/Y 偏移</summary>
+    public Action<TNode, float, float>? RequestScrollReposition { get; init; }
+    /// <summary>对滚轮像素值做平台侧归一化/平滑</summary>
+    public Func<float, float>? SmoothWheelScrollPixels { get; init; }
     /// <summary>将焦点设置到宿主窗口</summary>
     public Action FocusWindow { get; init; }
     /// <summary>判断原生窗口句柄是否有效</summary>

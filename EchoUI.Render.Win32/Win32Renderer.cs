@@ -8,7 +8,7 @@ namespace EchoUI.Render.Win32
     /// 使用 GDI+ 自绘模式，在单个 Win32 窗口上绘制所有 UI 元素。
     /// Input 元素使用嵌入的原生 Win32 Edit 控件。
     /// </summary>
-    public class Win32Renderer : IRenderer, IInstanceBindingRenderer, IDisposable
+    public class Win32Renderer : IRenderer, IInstanceBindingRenderer, IElementStateRenderer, IDisposable
     {
         private readonly Win32Window _window;
         private Win32Element? _rootElement;
@@ -30,12 +30,24 @@ namespace EchoUI.Render.Win32
         private float _layoutViewportHeight;
         private int _layoutCacheGeneration = 1;
         private readonly HashSet<string> _nativeDiagnostics = [];
+        private readonly Dictionary<string, ElementStateSnapshot> _elementStateSnapshots = [];
+        private readonly Stopwatch _wheelSmoothingStopwatch = Stopwatch.StartNew();
+        private float _smoothedWheelPixels;
+        private long _lastWheelSmoothingTimestamp;
+
+        private const double WheelSmoothingResetMs = 140.0;
+        private const float WheelSmoothingAlpha = 0.55f;
 
         internal Win32Element? RootElement => _rootElement;
         internal ComponentInstance? RootInstance => _rootInstance;
         internal Win32UpdateScheduler? Scheduler => _scheduler;
         internal HitTestManager<Win32Element> HitTestManager => _hitTestManager!;
         public IPlatformServices PlatformServices { get; }
+
+        /// <summary>
+        /// 是否启用滚轮输入值平滑。默认关闭，保持原始滚轮步进。
+        /// </summary>
+        public bool SmoothScrollEnabled { get; set; }
 
         public Win32Renderer(Win32Window window)
         {
@@ -54,6 +66,8 @@ namespace EchoUI.Render.Win32
                     if (b != null && !ReferenceEquals(a, b)) InvalidateElementBounds(b);
                 },
                 RequestRelayout = RequestRelayout,
+                RequestScrollReposition = RequestScrollReposition,
+                SmoothWheelScrollPixels = SmoothWheelScrollPixels,
                 FocusWindow = FocusWindow,
                 IsWindowValid = hwnd => NativeInterop.IsWindow(hwnd),
                 SetNativeFocus = hwnd => NativeInterop.SetFocus(hwnd),
@@ -89,6 +103,30 @@ namespace EchoUI.Render.Win32
                 element.OwnerInstance = null;
             }
         }
+
+        public void SaveElementState(object nativeElement, string stateKey)
+        {
+            if (nativeElement is not Win32Element element)
+                return;
+
+            _elementStateSnapshots[stateKey] = new ElementStateSnapshot(
+                element.ScrollOffsetX,
+                element.ScrollOffsetY);
+        }
+
+        public void RestoreElementState(object nativeElement, string stateKey)
+        {
+            if (nativeElement is not Win32Element element)
+                return;
+
+            if (_elementStateSnapshots.TryGetValue(stateKey, out var snapshot))
+            {
+                element.ScrollOffsetX = snapshot.ScrollOffsetX;
+                element.ScrollOffsetY = snapshot.ScrollOffsetY;
+            }
+        }
+
+        private readonly record struct ElementStateSnapshot(float ScrollOffsetX, float ScrollOffsetY);
 
         public object CreateElement(string type)
         {
@@ -497,7 +535,34 @@ namespace EchoUI.Render.Win32
             NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
         }
 
-        internal void RequestScrollReposition(Win32Element scrollTarget)
+        internal void RequestScrollReposition(Win32Element scrollTarget, float previousScrollX, float previousScrollY)
+        {
+            ApplyScrollReposition(scrollTarget);
+        }
+
+        private float SmoothWheelScrollPixels(float wheelPixels)
+        {
+            if (!SmoothScrollEnabled)
+                return wheelPixels;
+
+            var now = _wheelSmoothingStopwatch.ElapsedTicks;
+            var elapsedMs = _lastWheelSmoothingTimestamp == 0
+                ? WheelSmoothingResetMs
+                : (now - _lastWheelSmoothingTimestamp) * 1000.0 / Stopwatch.Frequency;
+            _lastWheelSmoothingTimestamp = now;
+
+            if (elapsedMs >= WheelSmoothingResetMs || Math.Sign(_smoothedWheelPixels) != Math.Sign(wheelPixels))
+                _smoothedWheelPixels = wheelPixels;
+            else
+                _smoothedWheelPixels += (wheelPixels - _smoothedWheelPixels) * WheelSmoothingAlpha;
+
+            return _smoothedWheelPixels;
+        }
+
+        internal void ApplyScrollReposition(
+            Win32Element scrollTarget,
+            bool syncManagedLayout = true,
+            bool syncNativeInputs = true)
         {
             if (_rootElement == null || _window.Hwnd == 0)
                 return;
@@ -515,8 +580,10 @@ namespace EchoUI.Render.Win32
             }
 
             LayoutEngine.UpdateAbsoluteLayout(scrollTarget);
-            SyncInstanceLayouts();
-            _nativeInputService.UpdatePositions(scrollTarget, vpW, vpH);
+            if (syncManagedLayout)
+                SyncInstanceLayouts();
+            if (syncNativeInputs)
+                _nativeInputService.UpdatePositions(scrollTarget, vpW, vpH);
             RequestRepaint(scrollTarget);
         }
 

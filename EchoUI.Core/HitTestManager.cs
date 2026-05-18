@@ -9,6 +9,9 @@ public class HitTestManager<TNode> where TNode : class, IHitTestNode<TNode>
     private TNode? _hoveredElement;
     private TNode? _pressedClickTarget;
     private TNode? _focusedElement;
+    private const float WheelDeltaPerNotch = 120f;
+    private const float WheelPixelsPerNotch = 48f;
+
     private MouseButton? _pressedButton;
     private int _suppressedCommittedCharCount;
     private readonly HitTestPlatform<TNode> _platform;
@@ -226,20 +229,25 @@ public class HitTestManager<TNode> where TNode : class, IHitTestNode<TNode>
             float previousScrollX = scrollTarget.ScrollOffsetX;
             float previousScrollY = scrollTarget.ScrollOffsetY;
 
+            var wheelPixels = delta / WheelDeltaPerNotch * WheelPixelsPerNotch;
+            if (_platform.SmoothWheelScrollPixels != null)
+                wheelPixels = _platform.SmoothWheelScrollPixels(wheelPixels);
+
             if (scrollHorizontal && maxScrollX > 0)
             {
-                scrollTarget.ScrollOffsetX -= delta * 0.3f;
-                scrollTarget.ScrollOffsetX = Math.Clamp(scrollTarget.ScrollOffsetX, 0, maxScrollX);
+                scrollTarget.ScrollOffsetX = Math.Clamp(scrollTarget.ScrollOffsetX - wheelPixels, 0, maxScrollX);
             }
             else if (maxScrollY > 0)
             {
-                scrollTarget.ScrollOffsetY -= delta * 0.3f;
-                scrollTarget.ScrollOffsetY = Math.Clamp(scrollTarget.ScrollOffsetY, 0, maxScrollY);
+                scrollTarget.ScrollOffsetY = Math.Clamp(scrollTarget.ScrollOffsetY - wheelPixels, 0, maxScrollY);
             }
 
             if (!previousScrollX.Equals(scrollTarget.ScrollOffsetX) || !previousScrollY.Equals(scrollTarget.ScrollOffsetY))
             {
-                _platform.RequestRelayout();
+                if (_platform.RequestScrollReposition != null)
+                    _platform.RequestScrollReposition(scrollTarget, previousScrollX, previousScrollY);
+                else
+                    _platform.RequestRelayout();
 
                 if (_hoveredElement != null)
                 {

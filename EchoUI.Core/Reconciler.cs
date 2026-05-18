@@ -207,6 +207,13 @@ namespace EchoUI.Core
                     _renderer.PatchProperties(instance.NativeElement, element.Props, initialPatch);
                 }
 
+                if (_renderer is IElementStateRenderer stateRenderer)
+                {
+                    var stateKey = GetElementStateKey(instance);
+                    if (stateKey != null)
+                        stateRenderer.RestoreElementState(instance.NativeElement, stateKey);
+                }
+
                 var parentContainer = GetParentContainer(instance);
                 var index = instance.Parent?.Children.IndexOf(instance) ?? -1;
                 _renderer.AddChild(parentContainer, instance.NativeElement, index);
@@ -287,7 +294,7 @@ namespace EchoUI.Core
             {
                 var oldElement = instance.Element;
 
-            if (!ElementTypesMatch(oldElement.Type, newElement.Type))
+            if (!ElementTypesMatch(oldElement.Type, newElement.Type) || !ElementKeysMatch(oldElement.Props.Key, newElement.Props.Key))
             {
                 var parent = instance.Parent;
                 var index = parent?.Children.IndexOf(instance) ?? -1;
@@ -561,6 +568,22 @@ namespace EchoUI.Core
             return _rootContainer;
         }
 
+        private string? GetElementStateKey(ComponentInstance instance)
+        {
+            if (instance.Element.Props.Key == null)
+                return null;
+
+            var parts = new Stack<string>();
+            for (var current = instance; current != null; current = current.Parent)
+            {
+                var name = DescribeElementType(current.Element.Type);
+                var key = current.Element.Props.Key;
+                parts.Push(key == null ? name : $"{name}:{key}");
+            }
+
+            return string.Join("/", parts);
+        }
+
         private object? GetFirstNativeElement(ComponentInstance instance)
         {
             if (instance.NativeElement != null)
@@ -574,6 +597,11 @@ namespace EchoUI.Core
             }
 
             return null;
+        }
+
+        private static bool ElementKeysMatch(string? oldKey, string? newKey)
+        {
+            return string.Equals(oldKey, newKey, StringComparison.Ordinal);
         }
 
         private bool ElementTypesMatch(ElementType type1, ElementType type2)
@@ -596,6 +624,13 @@ namespace EchoUI.Core
 
             if (instance.NativeElement != null)
             {
+                if (_renderer is IElementStateRenderer stateRenderer)
+                {
+                    var stateKey = GetElementStateKey(instance);
+                    if (stateKey != null)
+                        stateRenderer.SaveElementState(instance.NativeElement, stateKey);
+                }
+
                 var container = GetParentContainer(instance);
                 if (_renderer is IInstanceBindingRenderer bindingRenderer)
                 {
