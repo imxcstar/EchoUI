@@ -40,6 +40,7 @@ namespace EchoUI.Core
         public static Element CheckBox(CheckBoxProps props)
         {
             var (check, _, updateCheck) = Hooks.State(props.IsChecked);
+            var (hover, setHover, _) = Hooks.State(false);
 
             return Container(new ContainerProps
             {
@@ -47,6 +48,9 @@ namespace EchoUI.Core
                 Direction = LayoutDirection.Horizontal,
                 AlignItems = AlignItems.Center,
                 Gap = 8,
+                Cursor = "pointer",
+                OnMouseEnter = () => setHover(true),
+                OnMouseLeave = () => setHover(false),
                 OnClick = _ =>
                 {
                     updateCheck(v => !v);
@@ -56,28 +60,38 @@ namespace EchoUI.Core
                 [
                     Container(new ContainerProps
                     {
-                        Width = Dimension.Pixels(20),
-                        Height = Dimension.Pixels(20),
-                        BorderWidth = 2,
+                        Width = Dimension.Pixels(22),
+                        Height = Dimension.Pixels(22),
+                        BackgroundColor = check.Value ? DesignTokens.Primary : DesignTokens.BgContent,
+                        BorderWidth = 2.5f,
                         BorderStyle = BorderStyle.Solid,
-                        BorderColor = props.BorderColor ?? Color.Gray,
+                        BorderColor = check.Value ? DesignTokens.PrimaryActive : (hover.Value ? DesignTokens.Primary : props.BorderColor ?? DesignTokens.Border),
+                        BorderRadius = 8,
+                        Shadow = new BoxShadow(check.Value ? DesignTokens.PrimaryActive : DesignTokens.ShadowInput, 2),
                         JustifyContent = JustifyContent.Center,
                         AlignItems = AlignItems.Center,
+                        Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
+                        {
+                            [nameof(ContainerProps.BackgroundColor)] = new(150, Easing.EaseOut),
+                            [nameof(ContainerProps.BorderColor)] = new(150, Easing.EaseOut),
+                            [nameof(ContainerProps.Shadow)] = new(150, Easing.EaseOut),
+                        }),
                         Children =
                         [
                             check.Value
                                 ? Text(new TextProps
                                 {
                                     Text = "✓",
-                                    FontSize = 16,
-                                    Color = props.CheckColor ?? DesignTokens.Primary
+                                    FontSize = 13,
+                                    FontWeight = "900",
+                                    Color = props.CheckColor ?? DesignTokens.TextInverse
                                 })
                                 : Empty()
                         ]
                     }),
                     string.IsNullOrEmpty(props.Label)
                         ? Empty()
-                        : Text(new TextProps { Text = props.Label })
+                        : Text(new TextProps { Text = props.Label, Color = hover.Value ? DesignTokens.TextTitle : DesignTokens.TextBody, FontSize = 14, FontWeight = "600" })
                     ]
             });
         }

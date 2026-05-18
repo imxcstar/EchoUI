@@ -56,8 +56,8 @@ namespace EchoUI.Core
         {
             var (isOn, setIsOn, _) = Hooks.State(props.DefaultIsOn);
 
-            var widthPx = props.Width?.Unit == DimensionUnit.Pixels ? props.Width.Value.Value : 50f;
-            var heightPx = props.Height?.Unit == DimensionUnit.Pixels ? props.Height.Value.Value : 26f;
+            var widthPx = props.Width?.Unit == DimensionUnit.Pixels ? props.Width.Value.Value : 52f;
+            var heightPx = props.Height?.Unit == DimensionUnit.Pixels ? props.Height.Value.Value : 28f;
             const float paddingPx = 3f;
             var thumbSizePx = heightPx - (2 * paddingPx);
             var slidableWidth = widthPx - (2 * paddingPx) - thumbSizePx;
@@ -79,7 +79,11 @@ namespace EchoUI.Core
                 Key = props.Key,
                 Width = Dimension.Pixels(widthPx),
                 Height = Dimension.Pixels(heightPx),
-                BackgroundColor = isOn.Value ? (props.OnColor ?? DesignTokens.Success) : (props.OffColor ?? DesignTokens.ShadowInput),
+                BackgroundColor = isOn.Value ? (props.OnColor ?? Color.FromHex("#86d67a")) : (props.OffColor ?? DesignTokens.ShadowInput),
+                BorderColor = isOn.Value ? DesignTokens.Success : DesignTokens.Border,
+                BorderStyle = BorderStyle.Solid,
+                BorderWidth = 2.5f,
+                Shadow = new BoxShadow(isOn.Value ? DesignTokens.ShadowSwitchOn : DesignTokens.ShadowBtn, 2),
                 Transitions = trackTransitions,
                 BorderRadius = heightPx / 2,
                 Padding = new Spacing(Dimension.Pixels(paddingPx)),
@@ -97,8 +101,12 @@ namespace EchoUI.Core
                     {
                         Width = Dimension.Pixels(thumbSizePx),
                         Height = Dimension.Pixels(thumbSizePx),
-                        BackgroundColor = props.ThumbColor ?? Color.White,
+                        BackgroundColor = props.ThumbColor ?? DesignTokens.BgContent,
+                        BorderColor = isOn.Value ? DesignTokens.Success : DesignTokens.Border,
+                        BorderStyle = BorderStyle.Solid,
+                        BorderWidth = 2,
                         BorderRadius = thumbSizePx / 2,
+                        Shadow = new BoxShadow(isOn.Value ? DesignTokens.ShadowSwitchOn : DesignTokens.ShadowBtn, 2),
                         Margin = new Spacing(Dimension.Pixels(isOn.Value ? slidableWidth : 0f), Dimension.Pixels(0), Dimension.Pixels(isOn.Value ? 0f : slidableWidth), Dimension.Pixels(0)),
                         Transitions = thumbTransitions
                     })

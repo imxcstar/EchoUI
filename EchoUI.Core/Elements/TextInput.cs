@@ -116,13 +116,13 @@ namespace EchoUI.Core
                 : effectiveCaretIndex;
             var visibleRange = GetVisibleTextRange(measureText, props, displayValue, displayCaretIndex, isFocused.Value, !hasSelection || isComposing.Value);
             var imeAnchorPoint = GetInputMethodAnchorPoint(measureText, props, displayValue, visibleRange.Start, visibleRange.End, displayCaretIndex);
-            var textColor = props.TextColor ?? Color.Black;
-            var placeholderColor = props.PlaceholderColor ?? Color.Gray;
-            var selectionBackgroundColor = Color.FromHex("#2563eb");
-            var selectionTextColor = Color.White;
+            var textColor = props.TextColor ?? DesignTokens.TextBody;
+            var placeholderColor = props.PlaceholderColor ?? DesignTokens.TextDisabled;
+            var selectionBackgroundColor = DesignTokens.Primary;
+            var selectionTextColor = DesignTokens.TextInverse;
             var borderColor = isFocused.Value
-                ? props.FocusedBorderColor ?? props.BorderColor ?? Color.FromHex("#2563eb")
-                : props.BorderColor ?? Color.FromHex("#d1d5db");
+                ? props.FocusedBorderColor ?? DesignTokens.BorderFocus
+                : props.BorderColor ?? DesignTokens.Border;
             var inputBodyHeight = GetInputBodyHeight(props);
 
             void UpdateValue(string nextValue, int nextCaretIndex)
@@ -462,17 +462,23 @@ namespace EchoUI.Core
                     Container(new ContainerProps
                     {
                         Width = Dimension.Percent(100),
-                        Height = props.Height ?? Dimension.Pixels(36),
+                        Height = props.Height ?? Dimension.Pixels(40),
                         Direction = LayoutDirection.Horizontal,
                         JustifyContent = JustifyContent.Start,
                         AlignItems = AlignItems.Center,
                         Overflow = Overflow.Hidden,
-                        Padding = props.Padding ?? new Spacing(Dimension.Pixels(10), Dimension.Pixels(6)),
+                        Padding = props.Padding ?? new Spacing(Dimension.Pixels(18), Dimension.Pixels(0)),
                         BackgroundColor = props.BackgroundColor ?? DesignTokens.BgContent,
-                        BorderWidth = 1,
+                        BorderWidth = 2.5f,
                         BorderStyle = BorderStyle.Solid,
                         BorderColor = borderColor,
-                        BorderRadius = props.BorderRadius ?? 4,
+                        BorderRadius = props.BorderRadius ?? DesignTokens.RadiusPill,
+                        Shadow = new BoxShadow(isFocused.Value ? Color.FromHex("#e0b800") : DesignTokens.ShadowInput, isFocused.Value ? 3f : 3f),
+                        Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
+                        {
+                            [nameof(ContainerProps.BorderColor)] = new(180, Easing.EaseOut),
+                            [nameof(ContainerProps.Shadow)] = new(180, Easing.EaseOut),
+                        }),
                         Children =
                         [
                             Container(new ContainerProps
@@ -880,11 +886,12 @@ namespace EchoUI.Core
                         Height = Dimension.Percent(100),
                         Direction = LayoutDirection.Vertical,
                         Padding = new Spacing(Dimension.Pixels(menuPadding)),
-                        BackgroundColor = Color.White,
-                        BorderWidth = 1,
+                        BackgroundColor = DesignTokens.BgContent,
+                        BorderWidth = 2,
                         BorderStyle = BorderStyle.Solid,
-                        BorderColor = Color.FromHex("#d1d5db"),
-                        BorderRadius = 6,
+                        BorderColor = DesignTokens.Border,
+                        BorderRadius = DesignTokens.RadiusBase,
+                        Shadow = new BoxShadow(DesignTokens.ShadowInput, 4, 10),
                         Children =
                         [
                             CreateTextInputContextMenuItem("复制", hasSelection, copyAction),
@@ -919,8 +926,8 @@ namespace EchoUI.Core
                     : DesignTokens.BgContent;
 
             var textColor = itemProps.Enabled
-                ? (isHovered.Value ? Color.FromHex("#1d4ed8") : Color.Black)
-                : Color.Gray;
+                ? (isHovered.Value ? DesignTokens.Primary : DesignTokens.TextBody)
+                : DesignTokens.TextDisabled;
 
             return Container(new ContainerProps
             {
@@ -929,7 +936,7 @@ namespace EchoUI.Core
                 JustifyContent = JustifyContent.Center,
                 Padding = new Spacing(Dimension.Pixels(10), Dimension.Pixels(6)),
                 BackgroundColor = backgroundColor,
-                BorderRadius = 4,
+                BorderRadius = 12,
                 OnMouseEnter = itemProps.Enabled ? () => setIsHovered(true) : null,
                 OnMouseLeave = itemProps.Enabled ? () => setIsHovered(false) : null,
                 OnClick = itemProps.Enabled ? _ => itemProps.OnActivate?.Invoke() : null,
@@ -940,6 +947,7 @@ namespace EchoUI.Core
                         Text = itemProps.Text,
                         Color = textColor,
                         NoWrap = true,
+                        FontWeight = "600",
                         MouseThrough = true
                     })
                 ]

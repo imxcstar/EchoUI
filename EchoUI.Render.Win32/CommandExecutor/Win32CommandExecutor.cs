@@ -61,11 +61,7 @@ internal static class Win32CommandExecutor
             case DrawShadow s:
                 if (s.Color.A > 0 && (s.OffsetY != 0 || s.Blur > 0))
                 {
-                    GdiPlus.Flush();
-                    var blur = Math.Max(0, s.Blur);
-                    var ext = new RectF(s.Layout.X - blur, s.Layout.Y,
-                        s.Layout.Width + blur * 2, s.Layout.Height + s.OffsetY + blur);
-                    GdiPainter.FillShape(hdc, null, ext, s.Color, s.BorderRadius + blur);
+                    DrawShadow(hdc, s);
                 }
                 break;
 
@@ -125,6 +121,45 @@ internal static class Win32CommandExecutor
                     NativeInterop.RestoreDC(hdc, -1);
                 }
                 break;
+        }
+    }
+
+    private static void DrawShadow(nint hdc, DrawShadow shadow)
+    {
+        GdiPlus.Flush();
+
+        var blur = Math.Max(0, shadow.Blur);
+        if (blur <= 0)
+        {
+            var hardRect = new RectF(
+                shadow.Layout.X,
+                shadow.Layout.Y + shadow.OffsetY,
+                shadow.Layout.Width,
+                shadow.Layout.Height);
+            GdiPainter.FillShape(hdc, null, hardRect, shadow.Color, shadow.BorderRadius);
+            return;
+        }
+
+        var layerCount = Math.Clamp((int)Math.Ceiling(blur), 3, 18);
+        var maxAlpha = Math.Min(shadow.Color.A, (byte)120);
+
+        for (var layer = layerCount; layer >= 1; layer--)
+        {
+            var t = layer / (float)layerCount;
+            var expand = blur * t;
+            var weight = Math.Pow(1 - t * 0.75f, 2);
+            var alpha = Math.Clamp((int)Math.Round(maxAlpha * weight / 3), 0, 255);
+            if (alpha <= 0)
+                continue;
+
+            var color = shadow.Color.WithAlpha((byte)alpha);
+            var rect = new RectF(
+                shadow.Layout.X - expand,
+                shadow.Layout.Y,
+                shadow.Layout.Width + expand * 2,
+                shadow.Layout.Height + shadow.OffsetY + expand);
+
+            GdiPainter.FillShape(hdc, null, rect, color, shadow.BorderRadius + expand);
         }
     }
 }

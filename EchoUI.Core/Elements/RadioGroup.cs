@@ -52,6 +52,7 @@ namespace EchoUI.Core
             {
                 var index = i; // Capture loop variable
                 var isSelected = selectIndex.Value == index;
+                var selectedColor = props.SelectedColor ?? DesignTokens.Primary;
 
                 radioItems.Add(Container(new ContainerProps
                 {
@@ -60,6 +61,10 @@ namespace EchoUI.Core
                     Direction = LayoutDirection.Horizontal,
                     AlignItems = AlignItems.Center,
                     Gap = 8,
+                    Cursor = "pointer",
+                    Padding = new Spacing(Dimension.Pixels(8), Dimension.Pixels(4)),
+                    BackgroundColor = isSelected ? DesignTokens.PrimaryBg : Color.Transparent,
+                    BorderRadius = DesignTokens.RadiusPill,
                     OnClick = _ =>
                     {
                         setSelectIndex(index);
@@ -75,7 +80,8 @@ namespace EchoUI.Core
                             BorderRadius = 10,
                             BorderWidth = 2,
                             BorderStyle = BorderStyle.Solid,
-                            BorderColor = props.BorderColor ?? DesignTokens.Border,
+                            BackgroundColor = DesignTokens.BgContent,
+                            BorderColor = isSelected ? selectedColor : props.BorderColor ?? DesignTokens.Border,
                             JustifyContent = JustifyContent.Center,
                             AlignItems = AlignItems.Center,
                             Children =
@@ -87,12 +93,12 @@ namespace EchoUI.Core
                                         Width = Dimension.Pixels(10),
                                         Height = Dimension.Pixels(10),
                                         BorderRadius = 5,
-                                        BackgroundColor = props.SelectedColor ?? Color.Black
+                                        BackgroundColor = selectedColor
                                     })
                                     : Empty()
                             ]
                         }),
-                        Text(new TextProps { Text = props.Options[index] })
+                        Text(new TextProps { Text = props.Options[index], Color = isSelected ? DesignTokens.TextTitle : DesignTokens.TextBody, FontSize = 14, FontWeight = isSelected ? "700" : "500" })
                     ]
                 }));
             }

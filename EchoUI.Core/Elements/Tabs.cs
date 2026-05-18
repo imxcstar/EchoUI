@@ -85,10 +85,17 @@ namespace EchoUI.Core
                         Width = Dimension.Percent(100.0f / props.Titles.Count),
                         JustifyContent = JustifyContent.Center,
                         AlignItems = AlignItems.Center,
-                        Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(8)),
+                        Padding = new Spacing(Dimension.Pixels(14), Dimension.Pixels(8)),
                         BackgroundColor = isActive
                             ? (props.ActiveTabBackgroundColor ?? DesignTokens.PrimaryBg)
-                            : props.InactiveTabBackgroundColor,
+                            : props.InactiveTabBackgroundColor ?? Color.Transparent,
+                        BorderRadius = DesignTokens.RadiusPill,
+                        Shadow = isActive ? new BoxShadow(DesignTokens.ShadowInput, 3) : BoxShadow.None,
+                        Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
+                        {
+                            [nameof(ContainerProps.BackgroundColor)] = new(props.AnimationDuration, Easing.EaseOut),
+                            [nameof(ContainerProps.Shadow)] = new(props.AnimationDuration, Easing.EaseOut),
+                        }),
                         OnClick = _ => selectTab(index),
                         Children =
                         [
@@ -96,8 +103,10 @@ namespace EchoUI.Core
                             {
                                 Text = props.Titles[index],
                                 Color = isActive
-                                    ? (props.ActiveTabTextColor ?? Color.Black)
-                                    : (props.InactiveTabTextColor ?? Color.Gray)
+                                    ? (props.ActiveTabTextColor ?? DesignTokens.Primary)
+                                    : (props.InactiveTabTextColor ?? DesignTokens.TextMuted),
+                                FontSize = 14,
+                                FontWeight = isActive ? "700" : "600"
                             })
                         ]
                     })
@@ -116,6 +125,7 @@ namespace EchoUI.Core
                     Width = Dimension.Percent(currentIndex.Value == i ? 100 : 0),
                     Direction = LayoutDirection.Vertical,
                     FlexGrow = 1,
+                    Overflow = Overflow.Hidden,
                     Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
                     {
                         [nameof(ContainerProps.Width)] = new(props.AnimationDuration, Easing.EaseInOut)
@@ -137,6 +147,14 @@ namespace EchoUI.Core
             {
                 Key = props.Key,
                 Direction = LayoutDirection.Vertical,
+                Gap = 12,
+                BackgroundColor = DesignTokens.BgContent,
+                BorderColor = DesignTokens.Border,
+                BorderStyle = BorderStyle.Solid,
+                BorderWidth = 2,
+                BorderRadius = 20,
+                Padding = new Spacing(Dimension.Pixels(12)),
+                Shadow = new BoxShadow(DesignTokens.ShadowInput, 3),
                 Children =
                 [
                     // Tab Header container
@@ -145,9 +163,13 @@ namespace EchoUI.Core
                         Direction = LayoutDirection.Horizontal,
                         Width = Dimension.Percent(100),
                         FlexShrink = 0,
+                        Gap = 4,
+                        Padding = new Spacing(Dimension.Pixels(12)),
+                        BackgroundColor = Color.White.WithAlpha(150),
                         BorderColor = DesignTokens.Border,
-                        BorderWidth = 1,
+                        BorderWidth = 2,
                         BorderStyle = BorderStyle.Solid,
+                        BorderRadius = DesignTokens.RadiusBase,
                         Children = tabHeaders
                     }),
 

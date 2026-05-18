@@ -41,23 +41,24 @@ namespace EchoUI.Core
             var sz = DesignTokens.PrimaryButton(props.Size ?? "middle");
             var disabled = props.Disabled == true;
 
-            var baseBg = props.BackgroundColor ?? DesignTokens.Primary;
+            var hasCustomBackground = props.BackgroundColor is not null;
+            var baseBg = props.BackgroundColor ?? DesignTokens.BgMain;
             var bg = disabled ? DesignTokens.BgDisabled : baseBg;
             var textColor = props.TextColor ??
-                (disabled ? DesignTokens.TextDisabled : DesignTokens.TextInverse);
+                (disabled ? DesignTokens.TextDisabled : (hasCustomBackground ? DesignTokens.TextInverse : DesignTokens.TextTitle));
             var radius = props.BorderRadius ?? sz.Radius;
 
-            // 3D shadow: hover 时阴影加深，active 时阴影压缩
+            // Animal Island 3D shadow: hover 时阴影加深，active 时阴影压缩
             var shadow = disabled ? Color.Transparent : DesignTokens.ShadowBtn;
             var shadowHeight = 5f;
             if (!disabled && isPressed.Value)
             {
-                bg = props.PressedColor ?? DesignTokens.PrimaryActive;
-                shadowHeight = 2f;
+                bg = props.PressedColor ?? (hasCustomBackground ? DesignTokens.PrimaryActive : DesignTokens.BgContent);
+                shadowHeight = 1f;
             }
             else if (!disabled && isHovered.Value)
             {
-                bg = props.HoverColor ?? DesignTokens.PrimaryHover;
+                bg = props.HoverColor ?? (hasCustomBackground ? DesignTokens.PrimaryHover : Color.White);
                 shadowHeight = 6f;
             }
 
@@ -66,7 +67,7 @@ namespace EchoUI.Core
 
             var measuredTextWidth = Hooks.MeasureText(new TextMeasurementRequest
             {
-                Text = props.Text,
+                Text = props.Text ?? string.Empty,
                 FontSize = sz.FontSize,
                 FontWeight = "600"
             }).Width;
@@ -74,8 +75,8 @@ namespace EchoUI.Core
 
             var transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
             {
-                [nameof(ContainerProps.BackgroundColor)] = new(140, Easing.EaseOut),
-                [nameof(ContainerProps.Shadow)] = new(140, Easing.EaseOut),
+                [nameof(ContainerProps.BackgroundColor)] = new(180, Easing.EaseOut),
+                [nameof(ContainerProps.Shadow)] = new(180, Easing.EaseOut),
             });
 
             return Container(new ContainerProps
@@ -107,7 +108,7 @@ namespace EchoUI.Core
                 [
                     Text(new TextProps
                     {
-                        Text = props.Text,
+                        Text = props.Text ?? string.Empty,
                         Color = textColor,
                         FontSize = sz.FontSize,
                         FontWeight = "600",

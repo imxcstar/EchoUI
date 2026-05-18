@@ -59,6 +59,7 @@ public static class Showcase
             FlexShrink = 0,
             BackgroundColor = C.SidebarBg,
             Padding = new Spacing(Dimension.Pixels(18), Dimension.Pixels(16)),
+            Shadow = new BoxShadow(C.ShadowInput, 0, 18),
             Direction = LayoutDirection.Vertical,
             Gap = 8,
             Children =
@@ -74,12 +75,13 @@ public static class Showcase
                     [
                         Container(new ContainerProps
                         {
-                            Width = Dimension.Pixels(32), Height = Dimension.Pixels(32),
-                            BackgroundColor = C.Accent, BorderRadius = 8,
+                            Width = Dimension.Pixels(36), Height = Dimension.Pixels(36),
+                            BackgroundColor = C.Accent, BorderRadius = 18,
+                            Shadow = new BoxShadow(C.Shadow, 3),
                             JustifyContent = JustifyContent.Center, AlignItems = AlignItems.Center,
-                            Children = [Text(new TextProps { Text = "E", Color = Color.White, FontWeight = "800", FontSize = 16 })]
+                            Children = [Text(new TextProps { Text = "🌿", Color = C.TextTitle, FontWeight = "800", FontSize = 18 })]
                         }),
-                        Text(new TextProps { Text = "EchoUI", Color = Color.White, FontSize = 20, FontWeight = "800" })
+                        Text(new TextProps { Text = "Echo Island", Color = C.TextTitle, FontSize = 20, FontWeight = "900" })
                     ]
                 }),
 
@@ -88,10 +90,11 @@ public static class Showcase
                 // Version tag
                 Container(new ContainerProps
                 {
-                    Padding = new Spacing(Dimension.Pixels(8), Dimension.Pixels(4)),
+                    Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(6)),
                     BackgroundColor = C.AccentBg,
-                    BorderRadius = 6,
-                    Children = [Text(new TextProps { Text = ".NET 9 · Win32 + Web", Color = C.Accent, FontSize = 11, FontWeight = "600" })]
+                    BorderRadius = 99,
+                    Shadow = new BoxShadow(C.ShadowInput, 2),
+                    Children = [Text(new TextProps { Text = ".NET 9 · Win32 + Web", Color = C.Accent, FontSize = 11, FontWeight = "800" })]
                 }),
 
                 Container(new ContainerProps { Height = Dimension.Pixels(8) }),
@@ -111,8 +114,8 @@ public static class Showcase
                     Gap = 2,
                     Children =
                     [
-                        Text(new TextProps { Text = "Built with EchoUI", Color = C.TextMuted, FontSize = 10, FontWeight = "500" }),
-                        Text(new TextProps { Text = "github.com/AIDotNet/EchoUI", Color = C.TextFaint, FontSize = 9 }),
+                        Text(new TextProps { Text = "Animal Island Style", Color = C.TextMuted, FontSize = 11, FontWeight = "700" }),
+                        Text(new TextProps { Text = "Warm · Round · Playful", Color = C.TextFaint, FontSize = 10 }),
                     ]
                 })
             ]
@@ -124,9 +127,11 @@ public static class Showcase
         return Container(new ContainerProps
         {
             Width = Dimension.Percent(100),
-            Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(10)),
+            Padding = new Spacing(Dimension.Pixels(14), Dimension.Pixels(10)),
             BackgroundColor = active ? C.NavActiveBg : C.NavInactiveBg,
-            BorderRadius = 8,
+            BorderRadius = 14,
+            Shadow = active ? new BoxShadow(C.ShadowInput, 3) : BoxShadow.None,
+            Cursor = "pointer",
             OnClick = _ => onClick(),
             Direction = LayoutDirection.Horizontal,
             Gap = 10,
@@ -139,8 +144,8 @@ public static class Showcase
                 {
                     Text = label,
                     Color = active ? Color.White : C.TextMuted,
-                    FontSize = 13,
-                    FontWeight = active ? "700" : "500"
+                    FontSize = 14,
+                    FontWeight = active ? "800" : "600"
                 })
             ]
         });
@@ -170,16 +175,16 @@ public static class Showcase
     // ═══════════════════════════════════════════════════════
 
     private static Element SectionTitle(string text) =>
-        Text(new TextProps { Text = text, FontSize = 22, Color = Color.White, FontWeight = "800" });
+        Text(new TextProps { Text = text, FontSize = 28, Color = C.TextTitle, FontWeight = "900" });
 
     private static Element Subtitle(string text) =>
-        Text(new TextProps { Text = text, Color = C.TextSecondary, FontSize = 13, FontWeight = "500" });
+        Text(new TextProps { Text = text, Color = C.TextMuted, FontSize = 14, FontWeight = "600" });
 
     private static Element Card(string? title, IReadOnlyList<Element> children)
     {
         var list = new List<Element>();
         if (title != null)
-            list.Add(Text(new TextProps { Text = title, FontSize = 16, Color = Color.White, FontWeight = "700" }));
+            list.Add(Text(new TextProps { Text = title, FontSize = 17, Color = C.TextTitle, FontWeight = "800" }));
         list.AddRange(children);
 
         return Container(new ContainerProps
@@ -188,9 +193,10 @@ public static class Showcase
             BackgroundColor = C.CardBg,
             BorderColor = C.Border,
             BorderStyle = BorderStyle.Solid,
-            BorderWidth = 1,
-            BorderRadius = 12,
-            Padding = new Spacing(Dimension.Pixels(22)),
+            BorderWidth = 2,
+            BorderRadius = 20,
+            Padding = new Spacing(Dimension.Pixels(24)),
+            Shadow = new BoxShadow(C.ShadowInput, 4, 10),
             Direction = LayoutDirection.Vertical,
             Gap = 16,
             AlignItems = AlignItems.Stretch,
@@ -209,9 +215,10 @@ public static class Showcase
             BackgroundColor = C.CardBg,
             BorderColor = C.Border,
             BorderStyle = BorderStyle.Solid,
-            BorderWidth = 1,
-            BorderRadius = 10,
+            BorderWidth = 2,
+            BorderRadius = 18,
             Padding = new Spacing(Dimension.Pixels(20)),
+            Shadow = new BoxShadow(C.ShadowInput, 3, 8),
             Direction = LayoutDirection.Vertical,
             Gap = 10,
             Children =
@@ -227,7 +234,7 @@ public static class Showcase
                         Container(new ContainerProps { Width = Dimension.Pixels(8), Height = Dimension.Pixels(8), BorderRadius = 4, BackgroundColor = color })
                     ]
                 }),
-                Text(new TextProps { Text = value, Color = Color.White, FontSize = 28, FontWeight = "800" }),
+                Text(new TextProps { Text = value, Color = C.TextTitle, FontSize = 32, FontWeight = "900" }),
             ]
         });
     }
@@ -235,18 +242,54 @@ public static class Showcase
     private static Element Badge(string text, Color? bg = null, Color? fg = null) =>
         Container(new ContainerProps
         {
-            Padding = new Spacing(Dimension.Pixels(10), Dimension.Pixels(5)),
+            Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(6)),
             BackgroundColor = bg ?? C.AccentBg,
             BorderRadius = 99,
+            Shadow = new BoxShadow(C.ShadowInput.WithAlpha(120), 2),
             Children = [Text(new TextProps { Text = text, Color = fg ?? C.Accent, FontSize = 11, FontWeight = "700" })]
         });
 
     private static Element Tag(string text, Color bg, Color fg) =>
         Container(new ContainerProps
         {
-            Padding = new Spacing(Dimension.Pixels(10), Dimension.Pixels(5)),
+            Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(6)),
             BackgroundColor = bg, BorderRadius = 99,
-            Children = [Text(new TextProps { Text = text, Color = fg, FontSize = 11, FontWeight = "600" })]
+            Children = [Text(new TextProps { Text = text, Color = fg, FontSize = 11, FontWeight = "700" })]
+        });
+
+    private static Element NookTile(string emoji, string label, Color bg, Color fg) =>
+        Container(new ContainerProps
+        {
+            Width = Dimension.Pixels(118),
+            Height = Dimension.Pixels(118),
+            BackgroundColor = bg,
+            BorderRadius = 38,
+            Shadow = new BoxShadow(C.Shadow, 5, 8),
+            Direction = LayoutDirection.Vertical,
+            Gap = 8,
+            JustifyContent = JustifyContent.Center,
+            AlignItems = AlignItems.Center,
+            Children =
+            [
+                Text(new TextProps { Text = emoji, FontSize = 30 }),
+                Text(new TextProps { Text = label, Color = fg, FontSize = 12, FontWeight = "900" })
+            ]
+        });
+
+    private static Element SoftPanel(IReadOnlyList<Element> children) =>
+        Container(new ContainerProps
+        {
+            Width = Dimension.Percent(100),
+            BackgroundColor = C.InputBg,
+            BorderColor = C.Border,
+            BorderStyle = BorderStyle.Solid,
+            BorderWidth = 2,
+            BorderRadius = 24,
+            Padding = new Spacing(Dimension.Pixels(18)),
+            Shadow = new BoxShadow(C.ShadowInput, 3),
+            Direction = LayoutDirection.Vertical,
+            Gap = 12,
+            Children = children
         });
 
     private static ValueDictionary<string, Transition> Trans(params (string Prop, int Ms, Easing Easing)[] items)
@@ -376,7 +419,7 @@ public static class Showcase
                     Button(new ButtonProps
                     {
                         Text = "Create User",
-                        BackgroundColor = C.Accent, TextColor = Color.White,
+                        BackgroundColor = C.Accent, TextColor = C.TextTitle,
                         Width = Dimension.Pixels(130), Height = Dimension.Pixels(38),
                         BorderRadius = 6,
                         OnClick = _ =>
@@ -442,7 +485,7 @@ public static class Showcase
             [
                 Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 2, Children =
                 [
-                    Text(new TextProps { Text = u.Name, Color = Color.White, FontSize = 14, FontWeight = "600" }),
+                    Text(new TextProps { Text = u.Name, Color = C.TextTitle, FontSize = 14, FontWeight = "600" }),
                     Text(new TextProps { Text = u.Role, Color = C.TextSecondary, FontSize = 12 })
                 ]}),
                 Tag(u.Status, bg, color)
@@ -483,10 +526,10 @@ public static class Showcase
                 [
                     CardRow([
                         Button(new ButtonProps { Text = $"Click ({btnClicks.Value})", OnClick = _ => updateBtn(v => v + 1) }),
-                        Button(new ButtonProps { Text = "Primary", BackgroundColor = C.Accent, TextColor = Color.White }),
-                        Button(new ButtonProps { Text = "Success", BackgroundColor = C.Success, TextColor = Color.White }),
-                        Button(new ButtonProps { Text = "Warning", BackgroundColor = C.Warning, TextColor = Color.Black }),
-                        Button(new ButtonProps { Text = "Danger", BackgroundColor = C.Error, TextColor = Color.White }),
+                        Button(new ButtonProps { Text = "Primary", BackgroundColor = C.Accent, TextColor = C.TextTitle }),
+                        Button(new ButtonProps { Text = "Success", BackgroundColor = C.Success, TextColor = C.TextTitle }),
+                        Button(new ButtonProps { Text = "Warning", BackgroundColor = C.Warning, TextColor = C.TextTitle }),
+                        Button(new ButtonProps { Text = "Danger", BackgroundColor = C.Error, TextColor = C.TextTitle }),
                         Button(new ButtonProps { Text = "Ghost", BackgroundColor = C.InputBg, TextColor = C.TextBody }),
                     ]),
                     CardRow([
@@ -503,7 +546,7 @@ public static class Showcase
                     [
                         Container(new ContainerProps { FlexGrow = 1, Children =
                         [
-                            Input(new InputProps { Value = inputVal.Value, OnValueChanged = v => setInputVal(v), BackgroundColor = C.InputBg, TextColor = Color.White, BorderColor = C.Border, FocusedBorderColor = C.Accent })
+                            Input(new InputProps { Value = inputVal.Value, OnValueChanged = v => setInputVal(v), BackgroundColor = C.InputBg, TextColor = C.TextTitle, BorderColor = C.Border, FocusedBorderColor = C.Accent })
                         ]}),
                         Text(new TextProps { Text = $"{inputVal.Value.Length} chars", Color = C.TextSecondary, FontSize = 12 }),
                     ]}),
@@ -525,7 +568,7 @@ public static class Showcase
                         ]}),
                         Container(new ContainerProps { Width = Dimension.Pixels(180), Children =
                         [
-                            ComboBox(new ComboBoxProps { Options = ["Red", "Green", "Blue", "Purple"], SelectedIndex = comboIdx.Value, OnSelectionChanged = v => setComboIdx(v), BackgroundColor = C.InputBg, TextColor = Color.White, BorderColor = C.Border })
+                            ComboBox(new ComboBoxProps { Options = ["Red", "Green", "Blue", "Purple"], SelectedIndex = comboIdx.Value, OnSelectionChanged = v => setComboIdx(v), BackgroundColor = C.InputBg, TextColor = C.TextTitle, BorderColor = C.Border })
                         ]}),
                     ]),
                 ]),
@@ -537,8 +580,9 @@ public static class Showcase
                     [
                         Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 8, Children =
                         [
-                            Text(new TextProps { Text = "RadioGroup (horizontal)", Color = C.TextSecondary, FontSize = 12, FontWeight = "600" }),
-                            RadioGroup(new RadioGroupProps { Options = ["XS", "SM", "MD", "LG"], SelectedIndex = radioIdx.Value, OnSelectionChanged = v => setRadioIdx(v), Direction = LayoutDirection.Horizontal, SelectedColor = C.Accent, BorderColor = C.Border })
+                            Text(new TextProps { Text = "RadioGroup (horizontal)", Color = C.TextSecondary, FontSize = 12, FontWeight = "700" }),
+                            RadioGroup(new RadioGroupProps { Options = ["XS", "SM", "MD", "LG"], SelectedIndex = radioIdx.Value, OnSelectionChanged = v => setRadioIdx(v), Direction = LayoutDirection.Horizontal, SelectedColor = C.Accent, BorderColor = C.Border }),
+                            Text(new TextProps { Text = $"Selected: {new[] { "XS", "SM", "MD", "LG" }[radioIdx.Value]}", Color = C.TextMuted, FontSize = 12, FontWeight = "600" })
                         ]}),
                         Container(new ContainerProps { FlexGrow = 1, Children =
                         [
@@ -547,16 +591,39 @@ public static class Showcase
                                 Titles = ["Overview", "Details", "Settings"],
                                 Content = i => Container(new ContainerProps
                                 {
-                                    Height = Dimension.Pixels(100),
-                                    BackgroundColor = i switch { 0 => C.Accent, 1 => C.Success, _ => C.Warning },
-                                    BorderRadius = 8,
+                                    Height = Dimension.Pixels(108),
+                                    BackgroundColor = i switch { 0 => C.AccentBg, 1 => C.Success.WithAlpha(35), _ => C.Warning.WithAlpha(55) },
+                                    BorderRadius = 18,
+                                    BorderColor = C.Border,
+                                    BorderStyle = BorderStyle.Solid,
+                                    BorderWidth = 2,
                                     JustifyContent = JustifyContent.Center,
                                     AlignItems = AlignItems.Center,
-                                    Children = [Text(new TextProps { Text = $"Panel {i + 1}", Color = Color.White, FontWeight = "800" })]
+                                    Children = [Text(new TextProps { Text = i switch { 0 => "🌴 Overview panel", 1 => "✅ Details panel", _ => "⚙ Settings panel" }, Color = C.TextTitle, FontWeight = "900", FontSize = 18 })]
                                 })
                             })
                         ]})
                     ]})
+                ]),
+
+                Card("More Animal Island Controls",
+                [
+                    Container(new ContainerProps { Direction = LayoutDirection.Horizontal, Gap = 18, Children =
+                    [
+                        NookTile("📷", "Camera", C.Purple, Color.White),
+                        NookTile("🛍", "Market", Color.FromHex("#f8a6b2"), Color.White),
+                        NookTile("🗺", "Map", Color.FromHex("#82d5bb"), Color.White),
+                        NookTile("💬", "Chat", Color.FromHex("#d1da49"), C.TextTitle),
+                    ]}),
+                    SoftPanel([
+                        Text(new TextProps { Text = "Compact settings cluster", Color = C.TextTitle, FontSize = 15, FontWeight = "800" }),
+                        Container(new ContainerProps { Direction = LayoutDirection.Horizontal, Gap = 14, AlignItems = AlignItems.Center, Children =
+                        [
+                            Badge(checkOn.Value ? "CHECKED" : "UNCHECKED", checkOn.Value ? C.AccentBg : C.InputBg, checkOn.Value ? C.Accent : C.TextMuted),
+                            Badge(switchOn.Value ? "SYNC ON" : "SYNC OFF", switchOn.Value ? C.Success.WithAlpha(35) : C.InputBg, switchOn.Value ? C.Success : C.TextMuted),
+                            Tag($"Combo: {new[] { "Red", "Green", "Blue", "Purple" }[comboIdx.Value]}", C.Warning.WithAlpha(55), C.TextTitle)
+                        ]})
+                    ])
                 ]),
             ]
         });
@@ -629,7 +696,7 @@ public static class Showcase
         return Container(new ContainerProps
         {
             Width = Dimension.Percent(100),
-            BackgroundColor = Color.FromHex("#0F172A"),
+            BackgroundColor = Color.FromHex("#f0e8d8"),
             BorderColor = Color.FromHex("#334155"),
             BorderStyle = BorderStyle.Solid,
             BorderWidth = 1,
@@ -639,7 +706,7 @@ public static class Showcase
             Gap = 8,
             Children =
             [
-                Text(new TextProps { Text = "Transform 原点说明", Color = Color.White, FontSize = 15, FontWeight = "800" }),
+                Text(new TextProps { Text = "Transform 原点说明", Color = C.TextTitle, FontSize = 15, FontWeight = "800" }),
                 Text(new TextProps { Text = "TransformOrigin 表示元素自身边界内的锚点，例如 center、top-left、bottom-right；旋转/缩放/斜切都应该围绕这个局部锚点执行。", Color = C.TextSecondary, FontSize = 12, FontWeight = "500" }),
                 Text(new TextProps { Text = "之前 Win32 GDI+ 矩阵把 +/- origin 顺序写反，导致元素绕窗口坐标系转动，看起来脱离自身位置乱飞；现在已修正为先移到元素原点、变换、再移回。", Color = Color.FromHex("#93C5FD"), FontSize = 12, FontWeight = "700" })
             ]
@@ -662,7 +729,7 @@ public static class Showcase
     {
         var list = new List<Element>
         {
-            Text(new TextProps { Text = title, FontSize = 16, Color = Color.White, FontWeight = "700" }),
+            Text(new TextProps { Text = title, FontSize = 16, Color = C.TextTitle, FontWeight = "700" }),
             AnimationNote(note)
         };
         list.AddRange(children);
@@ -673,9 +740,10 @@ public static class Showcase
             BackgroundColor = C.CardBg,
             BorderColor = C.Border,
             BorderStyle = BorderStyle.Solid,
-            BorderWidth = 1,
-            BorderRadius = 12,
-            Padding = new Spacing(Dimension.Pixels(22)),
+            BorderWidth = 2,
+            BorderRadius = 20,
+            Padding = new Spacing(Dimension.Pixels(24)),
+            Shadow = new BoxShadow(C.ShadowInput, 4, 10),
             Direction = LayoutDirection.Vertical,
             Gap = 16,
             AlignItems = AlignItems.Stretch,
@@ -710,7 +778,7 @@ public static class Showcase
             [
                 Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 10, FlexGrow = 1, Children =
                 [
-                    Text(new TextProps { Text = "EchoUI Motion", Color = Color.White, FontSize = 26, FontWeight = "800" }),
+                    Text(new TextProps { Text = "EchoUI Motion", Color = C.TextTitle, FontSize = 26, FontWeight = "800" }),
                     Text(new TextProps { Text = "Click Play to animate color, size, spacing, and radius simultaneously.", Color = C.TextSecondary, FontSize = 14 }),
                     Container(new ContainerProps { Direction = LayoutDirection.Horizontal, Gap = 8, Children =
                     [
@@ -724,7 +792,7 @@ public static class Showcase
                     Height = Dimension.Pixels(on ? 48 : 40),
                     BorderRadius = on ? 16 : 10,
                     BackgroundColor = on ? Color.FromHex("#7C3AED") : C.Accent,
-                    TextColor = Color.White,
+                    TextColor = C.TextTitle,
                     OnClick = _ => toggle(),
                 }),
                 // Animated shape
@@ -775,7 +843,7 @@ public static class Showcase
                 [
                     Container(new ContainerProps { Width = Dimension.Pixels(100), FlexShrink = 0, Children =
                     [
-                        Text(new TextProps { Text = easing.ToString(), Color = Color.White, FontWeight = "700", FontSize = 13 })
+                        Text(new TextProps { Text = easing.ToString(), Color = C.TextTitle, FontWeight = "700", FontSize = 13 })
                     ]}),
                     Container(new ContainerProps { FlexGrow = 1, Height = Dimension.Pixels(24), BackgroundColor = C.Bg, BorderRadius = 12, Padding = new Spacing(Dimension.Pixels(3)), Children =
                     [
@@ -844,7 +912,7 @@ public static class Showcase
                         {
                             Width = Dimension.Pixels(76),
                             Height = Dimension.Pixels(76),
-                            BackgroundColor = Color.FromHex("#0F172A"),
+                            BackgroundColor = Color.FromHex("#f0e8d8"),
                             BorderColor = C.Border,
                             BorderStyle = BorderStyle.Solid,
                             BorderWidth = 1,
@@ -858,7 +926,7 @@ public static class Showcase
                                     Width = Dimension.Pixels(44),
                                     Height = Dimension.Pixels(44),
                                     BackgroundColor = color,
-                                    BorderColor = Color.White.WithAlpha(90),
+                                    BorderColor = C.TextTitle.WithAlpha(90),
                                     BorderStyle = BorderStyle.Solid,
                                     BorderWidth = 2,
                                     BorderRadius = on ? 18 : 8,
@@ -918,7 +986,7 @@ public static class Showcase
                         (nameof(ContainerProps.TransformOrigin), AnimSlow, Easing.EaseInOut)),
                     Children =
                     [
-                        Text(new TextProps { Text = on ? "Pivoted card" : "Resting card", Color = Color.White, FontSize = 16, FontWeight = "800" }),
+                        Text(new TextProps { Text = on ? "Pivoted card" : "Resting card", Color = C.TextTitle, FontSize = 16, FontWeight = "800" }),
                         Text(new TextProps { Text = "Transform chain: translate → rotate → scale", Color = Color.FromHex("#DBEAFE"), FontSize = 11, FontWeight = "600" })
                     ]
                 })
@@ -945,7 +1013,7 @@ public static class Showcase
                 {
                     Width = Dimension.Pixels(360),
                     Height = Dimension.Pixels(68),
-                    BackgroundColor = on ? Color.FromHex("#BE123C") : Color.FromHex("#0F766E"),
+                    BackgroundColor = on ? C.Peach : C.Accent,
                     BorderColor = on ? Color.FromHex("#FDA4AF") : Color.FromHex("#5EEAD4"),
                     BorderStyle = BorderStyle.Solid,
                     BorderWidth = 2,
@@ -961,7 +1029,7 @@ public static class Showcase
                         (nameof(ContainerProps.Shadow), AnimSlow, Easing.EaseInOut),
                         (nameof(ContainerProps.Transform), AnimSlow, Easing.EaseInOut),
                         (nameof(ContainerProps.TransformOrigin), AnimSlow, Easing.EaseInOut)),
-                    Children = [Text(new TextProps { Text = "SKEW RIBBON", Color = Color.White, FontSize = 18, FontWeight = "900" })]
+                    Children = [Text(new TextProps { Text = "SKEW RIBBON", Color = C.TextTitle, FontSize = 18, FontWeight = "900" })]
                 })
             ]
         });
@@ -972,7 +1040,7 @@ public static class Showcase
         var chips = new[]
         {
             ("A", Color.FromHex("#38BDF8"), -36f, -18f, -24f, 1.12f, TransformOrigin.BottomRight),
-            ("B", Color.FromHex("#A855F7"), 24f, 24f, 28f, 0.92f, TransformOrigin.TopLeft),
+            ("B", C.Purple, 24f, 24f, 28f, 0.92f, TransformOrigin.TopLeft),
             ("C", Color.FromHex("#22C55E"), 42f, -16f, 42f, 1.08f, TransformOrigin.LeftCenter),
             ("D", Color.FromHex("#F97316"), -24f, 20f, -36f, 0.96f, TransformOrigin.RightCenter),
         };
@@ -998,7 +1066,7 @@ public static class Showcase
                     Width = Dimension.Pixels(64),
                     Height = Dimension.Pixels(64),
                     BackgroundColor = color,
-                    BorderColor = Color.White.WithAlpha(95),
+                    BorderColor = C.TextTitle.WithAlpha(95),
                     BorderStyle = BorderStyle.Solid,
                     BorderWidth = 2,
                     BorderRadius = on ? 24 : 14,
@@ -1010,7 +1078,7 @@ public static class Showcase
                         (nameof(ContainerProps.Transform), AnimSlow, Easing.EaseInOut),
                         (nameof(ContainerProps.TransformOrigin), AnimSlow, Easing.EaseInOut),
                         (nameof(ContainerProps.BorderRadius), AnimSlow, Easing.EaseInOut)),
-                    Children = [Text(new TextProps { Text = label, Color = Color.White, FontSize = 18, FontWeight = "900" })]
+                    Children = [Text(new TextProps { Text = label, Color = C.TextTitle, FontSize = 18, FontWeight = "900" })]
                 });
             }).ToList()
         });
@@ -1064,7 +1132,7 @@ public static class Showcase
                 Badge("TRANSFORM", color.WithAlpha(55), Color.White),
                 Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 6, Children =
                 [
-                    Text(new TextProps { Text = title, Color = Color.White, FontSize = 18, FontWeight = "900" }),
+                    Text(new TextProps { Text = title, Color = C.TextTitle, FontSize = 18, FontWeight = "900" }),
                     Text(new TextProps { Text = subtitle, Color = Color.FromHex("#DDEAFE"), FontSize = 12, FontWeight = "600" }),
                 ]})
             ]
@@ -1085,7 +1153,7 @@ public static class Showcase
             [
                 Container(new ContainerProps { Width = Dimension.Pixels(180), FlexShrink = 0, Direction = LayoutDirection.Vertical, Gap = 4, Children =
                 [
-                    Text(new TextProps { Text = title, Color = Color.White, FontSize = 14, FontWeight = "700" }),
+                    Text(new TextProps { Text = title, Color = C.TextTitle, FontSize = 14, FontWeight = "700" }),
                     Text(new TextProps { Text = subtitle, Color = C.TextSecondary, FontSize = 11 })
                 ]}),
                 Container(new ContainerProps { FlexGrow = 1, Children = [visual] })
@@ -1109,7 +1177,7 @@ public static class Showcase
                 {
                     Width = Dimension.Pixels(on ? 340 : 180),
                     Height = Dimension.Pixels(on ? 80 : 50),
-                    BackgroundColor = on ? Color.FromHex("#BE123C") : C.Accent,
+                    BackgroundColor = on ? C.Peach : C.Accent,
                     BorderColor = on ? Color.FromHex("#FDA4AF") : Color.FromHex("#93C5FD"),
                     BorderStyle = BorderStyle.Solid,
                     BorderWidth = on ? 5 : 2,
@@ -1129,7 +1197,7 @@ public static class Showcase
                         (nameof(ContainerProps.Gap), AnimNormal, Easing.EaseInOut)),
                     Children =
                     [
-                        Text(new TextProps { Text = "Interactive Card", Color = Color.White, FontSize = 14, FontWeight = "800" }),
+                        Text(new TextProps { Text = "Interactive Card", Color = C.TextTitle, FontSize = 14, FontWeight = "800" }),
                         Text(new TextProps { Text = on ? "Expanded state" : "Compact state", Color = Color.FromHex("#E0E7FF"), FontSize = 11 })
                     ]
                 })
@@ -1161,8 +1229,8 @@ public static class Showcase
                     [
                         DockDot(Color.FromHex("#EF4444"), on ? 0 : 0),
                         DockDot(Color.FromHex("#22C55E"), on ? 36 : 0),
-                        DockDot(Color.FromHex("#3B82F6"), on ? 72 : 0),
-                        DockDot(Color.FromHex("#A855F7"), on ? 108 : 0),
+                        DockDot(C.AppBlue, on ? 72 : 0),
+                        DockDot(C.Purple, on ? 108 : 0),
                     ]
                 })
             ]
@@ -1212,7 +1280,7 @@ public static class Showcase
                         (nameof(ContainerProps.Padding), AnimNormal, Easing.EaseInOut)),
                     Children =
                     [
-                        Text(new TextProps { Text = on ? "Expanded" : "Collapsed", Color = Color.White, FontSize = 13, FontWeight = "700" }),
+                        Text(new TextProps { Text = on ? "Expanded" : "Collapsed", Color = C.TextTitle, FontSize = 13, FontWeight = "700" }),
                         Text(new TextProps { Text = "Height + MaxHeight + Padding sync.", Color = C.TextSecondary, FontSize = 11 })
                     ]
                 })
@@ -1262,7 +1330,7 @@ public static class Showcase
                 (nameof(ContainerProps.MinHeight), AnimNormal, Easing.EaseInOut),
                 (nameof(ContainerProps.MaxWidth), AnimNormal, Easing.EaseInOut),
                 (nameof(ContainerProps.MaxHeight), AnimNormal, Easing.EaseInOut)),
-            Children = [Text(new TextProps { Text = label, Color = Color.White, FontWeight = "800" })]
+            Children = [Text(new TextProps { Text = label, Color = C.TextTitle, FontWeight = "800" })]
         });
     }
 
@@ -1290,7 +1358,7 @@ public static class Showcase
             Padding = new Spacing(Dimension.Pixels(10), Dimension.Pixels(6)),
             Direction = LayoutDirection.Vertical, Gap = 2, Children =
             [
-                Text(new TextProps { Text = name, Color = Color.White, FontSize = 11, FontWeight = "700" }),
+                Text(new TextProps { Text = name, Color = C.TextTitle, FontSize = 11, FontWeight = "700" }),
                 Text(new TextProps { Text = type, Color = C.TextSecondary, FontSize = 10 })
             ]
         });
@@ -1310,7 +1378,7 @@ public static class Showcase
         var aligns = new[] { AlignItems.Start, AlignItems.Center, AlignItems.End, AlignItems.Stretch };
 
         var c1 = Color.FromHex("#EF4444"); var c2 = Color.FromHex("#22C55E");
-        var c3 = Color.FromHex("#3B82F6"); var c4 = Color.FromHex("#A855F7");
+        var c3 = C.AppBlue; var c4 = C.Purple;
 
         return Container(new ContainerProps
         {
@@ -1380,10 +1448,10 @@ public static class Showcase
         [
             Container(new ContainerProps { Direction = LayoutDirection.Horizontal, AlignItems = AlignItems.Center, Gap = 10, Children =
             [
-                Text(new TextProps { Text = $"{label}:", Color = Color.White, FontWeight = "700", FontSize = 14 }),
+                Text(new TextProps { Text = $"{label}:", Color = C.TextTitle, FontWeight = "700", FontSize = 14 }),
                 Container(new ContainerProps { Width = Dimension.Pixels(170), Children =
                 [
-                    ComboBox(new ComboBoxProps { Options = options, SelectedIndex = idx, OnSelectionChanged = v => setIdx(v), BackgroundColor = C.InputBg, TextColor = Color.White, BorderColor = C.Border })
+                    ComboBox(new ComboBoxProps { Options = options, SelectedIndex = idx, OnSelectionChanged = v => setIdx(v), BackgroundColor = C.InputBg, TextColor = C.TextTitle, BorderColor = C.Border })
                 ]})
             ]}),
             content(idx)
@@ -1396,7 +1464,7 @@ public static class Showcase
             Width = w ?? Dimension.Pixels(36), Height = h ?? Dimension.Pixels(36),
             BackgroundColor = color, BorderRadius = 6,
             JustifyContent = JustifyContent.Center, AlignItems = AlignItems.Center,
-            Children = [Text(new TextProps { Text = "#", Color = Color.White, FontSize = 12, FontWeight = "700" })]
+            Children = [Text(new TextProps { Text = "#", Color = C.TextTitle, FontSize = 12, FontWeight = "700" })]
         });
 
     private static Element BoxSolid(float size, Color color) =>
@@ -1478,7 +1546,7 @@ public static class Showcase
                     JustifyContent = JustifyContent.Center, AlignItems = AlignItems.Center,
                     Children = [Text(new TextProps { Text = emoji, FontSize = 24 })]
                 }),
-                Text(new TextProps { Text = title, FontSize = 15, Color = Color.White, FontWeight = "700" }),
+                Text(new TextProps { Text = title, FontSize = 15, Color = C.TextTitle, FontWeight = "700" }),
                 Text(new TextProps { Text = desc, FontSize = 11, Color = C.TextSecondary, NoWrap = false })
             ]
         });
@@ -1506,7 +1574,7 @@ public static class Showcase
                 ]}),
                 Container(new ContainerProps { Direction = LayoutDirection.Vertical, Gap = 3, FlexGrow = 1, Children =
                 [
-                    Text(new TextProps { Text = title, FontSize = 15, Color = Color.White, FontWeight = "700" }),
+                    Text(new TextProps { Text = title, FontSize = 15, Color = C.TextTitle, FontWeight = "700" }),
                     Text(new TextProps { Text = desc, FontSize = 11, Color = C.TextSecondary, NoWrap = false })
                 ]}),
                 Text(new TextProps { Text = "➡", FontSize = 16, Color = C.TextMuted })
@@ -1546,7 +1614,7 @@ public static class Showcase
                     Transitions = Trans((nameof(ContainerProps.BackgroundColor), 180, Easing.EaseOut)),
                     Children = [Text(new TextProps { Text = emoji, FontSize = 22 })]
                 }),
-                Text(new TextProps { Text = title, FontSize = 14, Color = Color.White, FontWeight = "700" }),
+                Text(new TextProps { Text = title, FontSize = 14, Color = C.TextTitle, FontWeight = "700" }),
                 Text(new TextProps { Text = desc, FontSize = 11, Color = C.TextSecondary, NoWrap = false })
             ]
         });
@@ -1588,7 +1656,7 @@ public static class Showcase
                         Container(new ContainerProps { Direction = LayoutDirection.Horizontal, Gap = 12, AlignItems = AlignItems.Center, Children =
                         [
                             Button(new ButtonProps { Text = "−", Width = Dimension.Pixels(50), Height = Dimension.Pixels(42), OnClick = _ => updateCount(v => v - 1) }),
-                            Button(new ButtonProps { Text = "Reset", Width = Dimension.Pixels(90), Height = Dimension.Pixels(42), BackgroundColor = C.InputBg, TextColor = Color.White, OnClick = _ => setCount(0) }),
+                            Button(new ButtonProps { Text = "Reset", Width = Dimension.Pixels(90), Height = Dimension.Pixels(42), BackgroundColor = C.InputBg, TextColor = C.TextTitle, OnClick = _ => setCount(0) }),
                             Button(new ButtonProps { Text = "+", Width = Dimension.Pixels(50), Height = Dimension.Pixels(42), OnClick = _ => updateCount(v => v + 1) }),
                         ]}),
                         Container(new ContainerProps
@@ -1614,7 +1682,7 @@ public static class Showcase
                     Container(new ContainerProps
                     {
                         Width = Dimension.Percent(100),
-                        BackgroundColor = Color.FromHex("#0D1520"),
+                        BackgroundColor = Color.FromHex("#2b2118"),
                         BorderColor = C.Border,
                         BorderStyle = BorderStyle.Solid,
                         BorderWidth = 1,
@@ -1772,7 +1840,7 @@ Built with ❤️ using **EchoUI** + **Markdig**.
                     {
                         Text = shouldThrow.Value ? "Exception armed" : "Throw during render",
                         BackgroundColor = C.Error,
-                        TextColor = Color.White,
+                        TextColor = C.TextTitle,
                         Width = Dimension.Pixels(180),
                         Height = Dimension.Pixels(40),
                         OnClick = _ => setShouldThrow(true)
@@ -1802,7 +1870,7 @@ Built with ❤️ using **EchoUI** + **Markdig**.
             Gap = 10,
             Children =
             [
-                Text(new TextProps { Text = "Outer diagnostic wrapper", Color = Color.White, FontWeight = "700" }),
+                Text(new TextProps { Text = "Outer diagnostic wrapper", Color = C.TextTitle, FontWeight = "700" }),
                 .. props.Children
             ]
         });
@@ -1819,7 +1887,7 @@ Built with ❤️ using **EchoUI** + **Markdig**.
         return Container(new ContainerProps
         {
             Key = "middle-container",
-            BackgroundColor = Color.FromHex("#0F172A"),
+            BackgroundColor = Color.FromHex("#f0e8d8"),
             BorderRadius = 8,
             Padding = new Spacing(Dimension.Pixels(14)),
             Children = [Create((Component)DiagnosticsBomb, new DiagnosticBombProps { Key = "bomb-component", ShouldThrow = middleProps.ShouldThrow })]
@@ -1854,23 +1922,30 @@ Built with ❤️ using **EchoUI** + **Markdig**.
 
     private static class C
     {
-        public static readonly Color Bg = Color.FromHex("#0B1120");
-        public static readonly Color SidebarBg = Color.FromHex("#0D1525");
-        public static readonly Color CardBg = Color.FromHex("#111827");
-        public static readonly Color InputBg = Color.FromHex("#1A2332");
-        public static readonly Color Border = Color.FromHex("#1E293B");
-        public static readonly Color NavActiveBg = Color.FromHex("#1E3A5F");
+        public static readonly Color Bg = Color.FromHex("#f8f8f0");
+        public static readonly Color SidebarBg = Color.FromHex("#fffaf0");
+        public static readonly Color CardBg = Color.FromHex("#f7f3df");
+        public static readonly Color InputBg = Color.FromHex("#f0e8d8");
+        public static readonly Color Border = Color.FromHex("#c4b89e");
+        public static readonly Color NavActiveBg = Color.FromHex("#B7C6E5");
         public static readonly Color NavInactiveBg = Color.Transparent;
 
-        public static readonly Color Accent = Color.FromHex("#3B82F6");
-        public static readonly Color AccentBg = Color.FromHex("#1E3A5F");
-        public static readonly Color Success = Color.FromHex("#22C55E");
-        public static readonly Color Warning = Color.FromHex("#F59E0B");
-        public static readonly Color Error = Color.FromHex("#EF4444");
+        public static readonly Color Accent = Color.FromHex("#19c8b9");
+        public static readonly Color AccentHover = Color.FromHex("#3dd4c6");
+        public static readonly Color AccentBg = Color.FromHex("#e6f9f6");
+        public static readonly Color Success = Color.FromHex("#6fba2c");
+        public static readonly Color Warning = Color.FromHex("#f5c31c");
+        public static readonly Color Error = Color.FromHex("#e05a5a");
+        public static readonly Color Peach = Color.FromHex("#e18c6f");
+        public static readonly Color Purple = Color.FromHex("#b77dee");
+        public static readonly Color AppBlue = Color.FromHex("#889df0");
+        public static readonly Color Shadow = Color.FromHex("#bdaea0");
+        public static readonly Color ShadowInput = Color.FromHex("#d4c9b4");
 
-        public static readonly Color TextBody = Color.FromHex("#E2E8F0");
-        public static readonly Color TextSecondary = Color.FromHex("#94A3B8");
-        public static readonly Color TextMuted = Color.FromHex("#64748B");
-        public static readonly Color TextFaint = Color.FromHex("#475569");
+        public static readonly Color TextBody = Color.FromHex("#725d42");
+        public static readonly Color TextTitle = Color.FromHex("#794f27");
+        public static readonly Color TextSecondary = Color.FromHex("#9f927d");
+        public static readonly Color TextMuted = Color.FromHex("#8a7b66");
+        public static readonly Color TextFaint = Color.FromHex("#c4b89e");
     }
 }

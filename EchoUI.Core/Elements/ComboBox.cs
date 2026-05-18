@@ -50,7 +50,7 @@ namespace EchoUI.Core
             var dropdownBackgroundColor = props.DropdownBackgroundColor ?? DesignTokens.BgContent;
             var accentColor = DesignTokens.Primary;
             var hoverBackgroundColor = DesignTokens.PrimaryBg;
-            var selectedBackgroundColor = Color.FromHex("EAF2FF");
+            var selectedBackgroundColor = DesignTokens.PrimaryBg;
             var mutedTextColor = DesignTokens.TextMuted;
 
             var selectedOptionText = (selectIndex.Value >= 0 && selectIndex.Value < props.Options.Count)
@@ -70,13 +70,13 @@ namespace EchoUI.Core
                     {
                         Key = props.Options[index],
                         Width = Dimension.Percent(100),
-                        Height = Dimension.Pixels(36),
+                        Height = Dimension.Pixels(38),
                         Direction = LayoutDirection.Horizontal,
                         JustifyContent = JustifyContent.SpaceBetween,
                         AlignItems = AlignItems.Center,
                         Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(8)),
                         BackgroundColor = isHovered ? hoverBackgroundColor : (isSelected ? selectedBackgroundColor : Color.Transparent),
-                        BorderRadius = 6,
+                        BorderRadius = 14,
                         OnMouseEnter = () => setHoverIndex(index),
                         OnMouseLeave = () =>
                         {
@@ -95,7 +95,9 @@ namespace EchoUI.Core
                             Text(new TextProps
                             {
                                 Text = props.Options[index],
-                                Color = isSelected ? accentColor : textColor
+                                Color = isSelected ? accentColor : textColor,
+                                FontSize = 14,
+                                FontWeight = isSelected ? "700" : "500"
                             }),
                             Text(new TextProps
                             {
@@ -130,16 +132,22 @@ namespace EchoUI.Core
                     Container(new ContainerProps
                     {
                         Width = Dimension.Percent(100),
-                        Height = Dimension.Pixels(36),
+                        Height = Dimension.Pixels(40),
                         Direction = LayoutDirection.Horizontal,
                         JustifyContent = JustifyContent.SpaceBetween,
                         AlignItems = AlignItems.Center,
-                        Padding = new Spacing(Dimension.Pixels(12), Dimension.Pixels(8)),
+                        Padding = new Spacing(Dimension.Pixels(18), Dimension.Pixels(0)),
                         BackgroundColor = backgroundColor,
-                        BorderWidth = 1,
+                        BorderWidth = 2.5f,
                         BorderStyle = BorderStyle.Solid,
-                        BorderColor = isOpen.Value ? accentColor : borderColor,
-                        BorderRadius = 6,
+                        BorderColor = isOpen.Value ? DesignTokens.BorderFocus : borderColor,
+                        BorderRadius = DesignTokens.RadiusPill,
+                        Shadow = new BoxShadow(isOpen.Value ? Color.FromHex("#e0b800") : DesignTokens.ShadowInput, 3),
+                        Transitions = new ValueDictionary<string, Transition>(new Dictionary<string, Transition>
+                        {
+                            [nameof(ContainerProps.BorderColor)] = new(180, Easing.EaseOut),
+                            [nameof(ContainerProps.Shadow)] = new(180, Easing.EaseOut),
+                        }),
                         OnClick = _ =>
                         {
                             setHoverIndex(-1);
@@ -151,6 +159,8 @@ namespace EchoUI.Core
                             {
                                 Text = selectedOptionText,
                                 Color = textColor,
+                                FontSize = 14,
+                                FontWeight = "600",
                                 NoWrap = true
                             }),
                             Text(new TextProps
@@ -178,10 +188,11 @@ namespace EchoUI.Core
                                 Gap = 4,
                                 Overflow = Overflow.Auto,
                                 BackgroundColor = dropdownBackgroundColor,
-                                BorderWidth = isOpen.Value ? 1 : 0,
+                                BorderWidth = isOpen.Value ? 2 : 0,
                                 BorderStyle = BorderStyle.Solid,
                                 BorderColor = borderColor,
-                                BorderRadius = 8,
+                                BorderRadius = DesignTokens.RadiusBase,
+                                Shadow = isOpen.Value ? new BoxShadow(DesignTokens.ShadowInput, 5, 12) : BoxShadow.None,
                                 Transitions =
                                 [
                                     [nameof(ContainerProps.Height), new Transition(150, Easing.EaseInOut)]
