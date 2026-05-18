@@ -149,6 +149,29 @@ namespace EchoUI.Render.Win32
         public void HandleMouseDown(Win32Element root, float x, float y, MouseButton button)
         {
             var hit = HitTest(root, x, y);
+
+            // 交叉验证：hover 链在滚动后可能返回过时元素。
+            // 用主树 HitTestRecursive 验证——如果不一致且不是 Float 子孙，以主树为准。
+            if (hit != null && _hoveredElement != null && !IsFloatDescendant(hit))
+            {
+                var mainHit = HitTestRecursive(root, x, y);
+                if (mainHit != null && !ReferenceEquals(hit, mainHit))
+                {
+                    // hover 链锁死在过时元素上，更正为正确的命中目标
+                    if (_hoveredElement != mainHit)
+                    {
+                        var oldHovered = _hoveredElement;
+                        var commonAncestor = FindCommonAncestor(oldHovered, mainHit);
+                        if (oldHovered != null)
+                            FireMouseLeaveChain(oldHovered, commonAncestor);
+                        if (mainHit != null)
+                            FireMouseEnterChain(mainHit, commonAncestor);
+                        _hoveredElement = mainHit;
+                    }
+                    hit = mainHit;
+                }
+            }
+
             _pressedButton = button;
             _pressedClickTarget = FindClickHandler(hit);
 
@@ -228,7 +251,16 @@ namespace EchoUI.Render.Win32
 
                 if (!previousScrollX.Equals(scrollTarget.ScrollOffsetX) || !previousScrollY.Equals(scrollTarget.ScrollOffsetY))
                 {
-                    _renderer.RequestScrollReposition(scrollTarget);
+                    _renderer.RequestRelayout();
+
+                    // 滚动后内容位移，hover 链中的元素可能全部过时。
+                    // 重新做 HitTest 也不可靠——鼠标仍在上次位置，可能命中同一个已滚走的元素。
+                    // 直接清空 hover，让下次 HandleMouseMove 或 HandleMouseDown 走主树命中测试重建。
+                    if (_hoveredElement != null)
+                    {
+                        FireMouseLeaveChain(_hoveredElement, null);
+                        _hoveredElement = null;
+                    }
                 }
             }
         }
@@ -319,19 +351,24 @@ namespace EchoUI.Render.Win32
 
         private Win32Element? HitTestFromHoveredChain(float x, float y)
         {
-            var current = _hoveredElement;
+            // 从 _hoveredElement 的父元素开始，而非自身。
+            // _hoveredElement 来自上一次鼠标位置，可能已经"过时"（例如内容区元素被滚动到与标题栏重叠），
+            // 直接命中自身会导致 hover 锁定，永远无法更新。
+            var current = _hoveredElement?.Parent;
             while (current != null)
             {
                 if (!current.Float)
                 {
-                    var hit = HitTestRecursive(current, x, y);
-                    if (hit != null)
-                        return hit;
+                    var bounds = current.GetAbsoluteBounds();
+                    if (x >= bounds.X && x <= bounds.Right && y >= bounds.Y && y <= bounds.Bottom)
+                    {
+                        var hit = HitTestRecursive(current, x, y);
+                        if (hit != null)
+                            return hit;
+                    }
                 }
-
                 current = current.Parent;
             }
-
             return null;
         }
 
@@ -433,6 +470,21 @@ namespace EchoUI.Render.Win32
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 检查元素的祖先链中是否包含 Float 容器（用于识别下拉框、弹出层等 Float 子元素）
+        /// </summary>
+        private static bool IsFloatDescendant(Win32Element? element)
+        {
+            var current = element;
+            while (current != null)
+            {
+                if (current.Float)
+                    return true;
+                current = current.Parent;
+            }
+            return false;
         }
 
         private static Win32Element? FindDownHandler(Win32Element? element)
