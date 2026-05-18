@@ -111,10 +111,18 @@ namespace EchoUI.Core
                 }
             }
 
+            const float optionHeight = 38;
+            const float optionGap = 4;
+            const float dropdownPadding = 4;
+            const float dropdownBorderWidth = 2;
             var visibleOptionCount = Math.Min(props.Options.Count, 6);
             var shouldScroll = props.Options.Count > visibleOptionCount;
             var dropdownHeight = isOpen.Value
-                ? Dimension.Pixels(visibleOptionCount * 36 + Math.Max(0, visibleOptionCount - 1) * 4 + 8 + 2)
+                ? Dimension.Pixels(
+                    visibleOptionCount * optionHeight +
+                    Math.Max(0, visibleOptionCount - 1) * optionGap +
+                    dropdownPadding * 2 +
+                    dropdownBorderWidth * 2)
                 : Dimension.ZeroPixels;
 
             return Container(new ContainerProps
@@ -185,10 +193,10 @@ namespace EchoUI.Core
                                 Height = dropdownHeight,
                                 Padding = new Spacing(Dimension.Pixels(4)),
                                 Direction = LayoutDirection.Vertical,
-                                Gap = 4,
-                                Overflow = Overflow.Auto,
+                                Gap = optionGap,
+                                Overflow = shouldScroll ? Overflow.Auto : Overflow.Hidden,
                                 BackgroundColor = dropdownBackgroundColor,
-                                BorderWidth = isOpen.Value ? 2 : 0,
+                                BorderWidth = isOpen.Value ? dropdownBorderWidth : 0,
                                 BorderStyle = BorderStyle.Solid,
                                 BorderColor = borderColor,
                                 BorderRadius = DesignTokens.RadiusBase,
