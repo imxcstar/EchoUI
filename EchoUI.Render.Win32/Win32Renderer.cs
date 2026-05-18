@@ -157,20 +157,7 @@ namespace EchoUI.Render.Win32
             }
 
             // 为不同类型的元素应用默认值（与 WebRenderer 保持一致）
-            switch (newProps)
-            {
-                case ContainerProps p:
-                    element.Direction = p.Direction ?? LayoutDefaults.Direction;
-                    element.JustifyContent = p.JustifyContent ?? LayoutDefaults.JustifyContent;
-                    element.AlignItems = p.AlignItems ?? LayoutDefaults.AlignItems;
-                    element.FlexShrink = p.FlexShrink ?? LayoutDefaults.FlexShrink;
-                    element.FlexGrow = p.FlexGrow ?? LayoutDefaults.FlexGrow;
-                    break;
-                case TextProps p:
-                    element.MouseThrough = p.MouseThrough;
-                    element.NoWrap = p.NoWrap;
-                    break;
-            }
+            RenderNodePropertyMapper.ApplyDefaults(element, newProps);
 
             // 3. 启动动画（从旧值 → 新值）
             if (animatedProps != null && transitions != null)
@@ -290,176 +277,17 @@ namespace EchoUI.Render.Win32
 
         private void ApplyProperty(Win32Element element, Props props, string propName, object? propValue)
         {
-            switch (props)
+            if (props is NativeProps nativeProps)
             {
-                case ContainerProps:
-                    ApplyContainerProperty(element, propName, propValue);
-                    break;
-                case TextProps:
-                    ApplyTextProperty(element, propName, propValue);
-                    break;
-                case InputProps:
-                    ApplyInputProperty(element, propName, propValue);
-                    break;
-                case NativeProps nativeProps:
-                    ApplyNativeProperty(element, nativeProps, propName, propValue);
-                    break;
+                ApplyNativeProperty(element, nativeProps, propName, propValue);
+                return;
             }
-        }
 
-        private void ApplyContainerProperty(Win32Element element, string propName, object? propValue)
-        {
-            switch (propName)
+            RenderNodePropertyMapper.ApplyProperty(element, props, propName, propValue);
+
+            if (propName == nameof(ContainerProps.InputMethodAnchorPoint) && element.IsFocused)
             {
-                // 尺寸
-                case nameof(ContainerProps.Width): element.Width = propValue as Dimension?; break;
-                case nameof(ContainerProps.Height): element.Height = propValue as Dimension?; break;
-                case nameof(ContainerProps.MinWidth): element.MinWidth = propValue as Dimension?; break;
-                case nameof(ContainerProps.MinHeight): element.MinHeight = propValue as Dimension?; break;
-                case nameof(ContainerProps.MaxWidth): element.MaxWidth = propValue as Dimension?; break;
-                case nameof(ContainerProps.MaxHeight): element.MaxHeight = propValue as Dimension?; break;
-
-                // 间距
-                case nameof(ContainerProps.Margin): element.Margin = propValue as Spacing?; break;
-                case nameof(ContainerProps.Padding): element.Padding = propValue as Spacing?; break;
-
-                // Flex
-                case nameof(ContainerProps.Direction):
-                    element.Direction = propValue is LayoutDirection dir ? dir : LayoutDefaults.Direction;
-                    break;
-                case nameof(ContainerProps.JustifyContent):
-                    element.JustifyContent = propValue is JustifyContent jc ? jc : LayoutDefaults.JustifyContent;
-                    break;
-                case nameof(ContainerProps.AlignItems):
-                    element.AlignItems = propValue is AlignItems ai ? ai : LayoutDefaults.AlignItems;
-                    break;
-                case nameof(ContainerProps.FlexGrow):
-                    element.FlexGrow = propValue is float fg ? fg : LayoutDefaults.FlexGrow;
-                    break;
-                case nameof(ContainerProps.FlexShrink):
-                    element.FlexShrink = propValue is float fs ? fs : LayoutDefaults.FlexShrink;
-                    break;
-                case nameof(ContainerProps.Gap):
-                    element.Gap = propValue is float gap ? gap : LayoutDefaults.Gap;
-                    break;
-                case nameof(ContainerProps.Float):
-                    element.Float = propValue is true;
-                    break;
-                case nameof(ContainerProps.Overflow):
-                    element.Overflow = propValue is Overflow ov ? ov : Overflow.Visible;
-                    break;
-
-                // 外观
-                case nameof(ContainerProps.BackgroundColor):
-                    element.BackgroundColor = propValue as Core.Color?;
-                    break;
-                case nameof(ContainerProps.BorderColor):
-                    element.BorderColor = propValue as Core.Color?;
-                    break;
-                case nameof(ContainerProps.BorderStyle):
-                    element.BorderStyle = propValue is Core.BorderStyle bs ? bs : Core.BorderStyle.None;
-                    break;
-                case nameof(ContainerProps.BorderWidth):
-                    element.BorderWidth = propValue is float bw ? bw : 0;
-                    break;
-                case nameof(ContainerProps.BorderRadius):
-                    element.BorderRadius = propValue is float br ? br : 0;
-                    break;
-                case nameof(ContainerProps.Shadow):
-                    element.Shadow = propValue is BoxShadow shadow ? shadow : BoxShadow.None;
-                    break;
-                case nameof(ContainerProps.Opacity):
-                    element.Opacity = propValue is float op ? op : 1f;
-                    break;
-                case nameof(ContainerProps.Transform):
-                    element.Transform = propValue is Transform transform ? transform : new Transform();
-                    break;
-                case nameof(ContainerProps.TransformOrigin):
-                    element.TransformOrigin = propValue is TransformOrigin origin ? origin : TransformOrigin.Center;
-                    break;
-                case nameof(ContainerProps.Cursor):
-                    element.Cursor = propValue as string;
-                    break;
-                case nameof(ContainerProps.InputMethodAnchorPoint):
-                    element.InputMethodAnchorPoint = propValue is Core.Point point ? point : null;
-                    if (element.IsFocused)
-                        _window.UpdateImePosition(element);
-                    break;
-
-                // 事件由 UpdateEventHandlers 处理
-                // Transitions 由 PatchProperties 中的动画管理器处理
-            }
-        }
-
-        private void ApplyTextProperty(Win32Element element, string propName, object? propValue)
-        {
-            switch (propName)
-            {
-                case nameof(TextProps.Text):
-                    element.Text = propValue as string;
-                    break;
-                case nameof(TextProps.FontFamily):
-                    element.FontFamily = propValue as string;
-                    break;
-                case nameof(TextProps.FontSize):
-                    element.FontSize = propValue is float fs ? fs : 14;
-                    break;
-                case nameof(TextProps.Color):
-                    element.TextColor = propValue as Core.Color?;
-                    break;
-                case nameof(TextProps.FontWeight):
-                    element.FontWeight = propValue as string;
-                    break;
-                case nameof(TextProps.MouseThrough):
-                    element.MouseThrough = propValue is not false;
-                    break;
-                case nameof(TextProps.NoWrap):
-                    element.NoWrap = propValue is true;
-                    break;
-            }
-        }
-
-        private void ApplyInputProperty(Win32Element element, string propName, object? propValue)
-        {
-            switch (propName)
-            {
-                case nameof(InputProps.Value):
-                    element.InputValue = propValue as string;
-                    break;
-                case nameof(InputProps.BackgroundColor):
-                    element.BackgroundColor = propValue as Core.Color?;
-                    break;
-                case nameof(InputProps.TextColor):
-                    element.TextColor = propValue as Core.Color?;
-                    break;
-                case nameof(InputProps.BorderColor):
-                    element.BorderColor = propValue as Core.Color?;
-                    ApplyInputBorderDefaults(element);
-                    break;
-                case nameof(InputProps.FocusedBorderColor):
-                    element.FocusedBorderColor = propValue as Core.Color?;
-                    ApplyInputBorderDefaults(element);
-                    break;
-                case nameof(InputProps.Padding):
-                    element.Padding = propValue as Spacing?;
-                    break;
-                // OnValueChanged 由 UpdateEventHandlers 处理
-            }
-        }
-
-        private void ApplyInputBorderDefaults(Win32Element element)
-        {
-            if (element.BorderColor.HasValue || element.FocusedBorderColor.HasValue)
-            {
-                if (element.BorderStyle == Core.BorderStyle.None)
-                    element.BorderStyle = Core.BorderStyle.Solid;
-                if (element.BorderWidth <= 0)
-                    element.BorderWidth = 1;
-            }
-            else
-            {
-                element.BorderStyle = Core.BorderStyle.None;
-                element.BorderWidth = 0;
+                _window.UpdateImePosition(element);
             }
         }
 
@@ -512,58 +340,20 @@ namespace EchoUI.Render.Win32
 
         private void UpdateEventHandlers(Win32Element element, Props newProps)
         {
-            switch (newProps)
+            if (newProps is NativeProps nativeProps)
             {
-                case ContainerProps p:
-                    element.OnClick = p.OnClick;
-                    element.OnMouseMove = p.OnMouseMove;
-                    element.OnPointerDown = p.OnPointerDown;
-                    element.OnPointerMove = p.OnPointerMove;
-                    element.OnPointerUp = p.OnPointerUp;
-                    element.OnMouseEnter = p.OnMouseEnter;
-                    element.OnMouseLeave = p.OnMouseLeave;
-                    element.OnMouseDown = p.OnMouseDown;
-                    element.OnMouseUp = p.OnMouseUp;
-                    element.OnKeyDown = p.OnKeyDown;
-                    element.OnKeyUp = p.OnKeyUp;
-                    element.OnTextInput = p.OnTextInput;
-                    element.OnTextComposition = p.OnTextComposition;
-                    element.OnFocus = p.OnFocus;
-                    element.OnBlur = p.OnBlur;
-                    break;
-                case InputProps ip:
-                    element.OnValueChanged = ip.OnValueChanged;
-                    break;
-                case NativeProps nativeProps:
-                    ClearNativeEventHandlers(element);
-                    if (nativeProps.Properties == null) break;
+                RenderNodePropertyMapper.ClearEventHandlers(element);
+                if (nativeProps.Properties == null) return;
 
-                    foreach (var item in nativeProps.Properties.Value.Data)
-                    {
-                        ApplyNativeEventHandler(element, item.Key, item.Value);
-                    }
-                    break;
+                foreach (var item in nativeProps.Properties.Value.Data)
+                {
+                    ApplyNativeEventHandler(element, item.Key, item.Value);
+                }
+
+                return;
             }
-        }
 
-        private static void ClearNativeEventHandlers(Win32Element element)
-        {
-            element.OnClick = null;
-            element.OnMouseMove = null;
-            element.OnPointerDown = null;
-            element.OnPointerMove = null;
-            element.OnPointerUp = null;
-            element.OnMouseEnter = null;
-            element.OnMouseLeave = null;
-            element.OnMouseDown = null;
-            element.OnMouseUp = null;
-            element.OnKeyDown = null;
-            element.OnKeyUp = null;
-            element.OnTextInput = null;
-            element.OnTextComposition = null;
-            element.OnFocus = null;
-            element.OnBlur = null;
-            element.OnValueChanged = null;
+            RenderNodePropertyMapper.UpdateEventHandlers(element, newProps);
         }
 
         private void ApplyNativeEventHandler(Win32Element element, string eventName, object? value)
@@ -759,7 +549,7 @@ namespace EchoUI.Render.Win32
 
             element.Children.Clear();
             ReleasePlatformResources(element);
-            ClearNativeEventHandlers(element);
+            RenderNodePropertyMapper.ClearEventHandlers(element);
             element.Parent = null;
         }
 
