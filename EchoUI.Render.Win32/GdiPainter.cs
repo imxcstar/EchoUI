@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -293,8 +293,7 @@ namespace EchoUI.Render.Win32
             else
             {
                 // 其余类型通过 PaintEngine 生成命令
-                var commands = new List<RenderCommand>();
-                AddWin32ElementCommands(element, ToLayoutBox(bounds), commands);
+                var commands = PaintEngine.GenerateCommands(element, ToLayoutBox(bounds));
                 if (commands.Count > 0)
                     Win32CommandExecutor.Execute(hdc, commands);
             }
@@ -370,7 +369,7 @@ namespace EchoUI.Render.Win32
                 {
                     case ElementCoreName.Container:
                     case ElementCoreName.Text:
-                        AddWin32ElementCommands(native, layout.Value, commands);
+                        commands.AddRange(PaintEngine.GenerateCommands(native, layout.Value));
                         break;
                 }
             }
@@ -397,59 +396,6 @@ namespace EchoUI.Render.Win32
             if (hasTransform)
             {
                 commands.Add(new PopTransform());
-            }
-        }
-
-        /// <summary>将 Win32Element 当前属性转换为 PaintEngine 命令</summary>
-        private static void AddWin32ElementCommands(Win32Element element, LayoutBox layout, List<RenderCommand> commands)
-        {
-            switch (element.ElementType)
-            {
-                case ElementCoreName.Container:
-                case "" or null:
-                    commands.AddRange(PaintEngine.GenerateCommands(
-                        new Element(ElementCoreName.Container, new ContainerProps
-                        {
-                            BackgroundColor = element.BackgroundColor,
-                            BorderColor = element.BorderColor,
-                            BorderStyle = element.BorderStyle,
-                            BorderWidth = element.BorderWidth,
-                            BorderRadius = element.BorderRadius,
-                            Shadow = element.Shadow,
-                        }),
-                        layout));
-                    break;
-
-                case ElementCoreName.Text:
-                    commands.AddRange(PaintEngine.GenerateCommands(
-                        new Element(ElementCoreName.Text, new TextProps
-                        {
-                            Text = element.Text ?? string.Empty,
-                            FontFamily = element.FontFamily,
-                            FontSize = element.FontSize > 0 ? (float?)element.FontSize : null,
-                            Color = element.TextColor,
-                            FontWeight = element.FontWeight,
-                            MouseThrough = element.MouseThrough,
-                            NoWrap = element.NoWrap,
-                        }),
-                        layout));
-                    break;
-
-                case ElementCoreName.Input:
-                    var effectiveBorderColor = element.IsFocused && element.FocusedBorderColor.HasValue
-                        ? element.FocusedBorderColor
-                        : element.BorderColor;
-                    commands.AddRange(PaintEngine.GenerateCommands(
-                        new Element(ElementCoreName.Container, new ContainerProps
-                        {
-                            BackgroundColor = element.BackgroundColor,
-                            BorderColor = effectiveBorderColor,
-                            BorderStyle = effectiveBorderColor.HasValue ? Core.BorderStyle.Solid : Core.BorderStyle.None,
-                            BorderWidth = effectiveBorderColor.HasValue ? 1f : 0f,
-                            BorderRadius = 0,
-                        }),
-                        layout));
-                    break;
             }
         }
 

@@ -21,15 +21,9 @@ namespace EchoUI.Render.Win32
         internal IReadOnlyList<Win32Element> FloatingElements => _floatingElements;
         internal Win32AnimationManager AnimationManager => _animationManager;
 
-        /// <summary>
-        /// 所有 Input 元素的 Edit HWND → Win32Element 映射
-        /// </summary>
-        private readonly Dictionary<nint, Win32Element> _editElements = [];
-
-        /// <summary>
-        /// 防止 Edit 控件 EN_CHANGE 通知的递归触发
-        /// </summary>
-        private bool _suppressEditNotification;
+        private readonly Win32ImageService _imageService;
+        private readonly Win32InputMethodService _inputMethodService;
+        private readonly Win32NativeInputService _nativeInputService;
         private bool _disposed;
         private bool _layoutValid;
         private float _layoutViewportWidth;
@@ -47,6 +41,9 @@ namespace EchoUI.Render.Win32
         {
             _window = window;
             PlatformServices = new Win32PlatformServices();
+            _imageService = new Win32ImageService();
+            _inputMethodService = new Win32InputMethodService(() => _window.Hwnd);
+            _nativeInputService = new Win32NativeInputService(() => _window.Hwnd, RequestRepaint);
             _hitTestManager = new HitTestManager<Win32Element>(new HitTestPlatform<Win32Element>
             {
                 GetFloatingElements = () => _floatingElements,
@@ -102,7 +99,7 @@ namespace EchoUI.Render.Win32
             {
                 element.Width = Dimension.Percent(100);
                 element.Height = Dimension.Percent(100);
-                CreateEditControl(element);
+                _nativeInputService.Create(element);
             }
             else if (type != ElementCoreName.Container && type != ElementCoreName.Text && type != "img")
             {
@@ -173,7 +170,7 @@ namespace EchoUI.Render.Win32
             // 同步 Input 的原生 Edit 控件
             if (element.ElementType == ElementCoreName.Input && element.EditHwnd != 0)
             {
-                SyncEditControl(element);
+                _nativeInputService.Sync(element);
             }
         }
 
@@ -287,7 +284,7 @@ namespace EchoUI.Render.Win32
 
             if (propName == nameof(ContainerProps.InputMethodAnchorPoint) && element.IsFocused)
             {
-                _window.UpdateImePosition(element);
+                _inputMethodService.UpdatePosition(element);
             }
         }
 
@@ -307,14 +304,11 @@ namespace EchoUI.Render.Win32
                 {
                     if (propValue is string src)
                     {
-                        LoadImage(element, src);
+                        _imageService.Load(element, src);
                     }
                     else if (propValue == null && element.NativeImageHandle != 0)
                     {
-                        NativeInterop.DeleteObject(element.NativeImageHandle);
-                        element.NativeImageHandle = 0;
-                        element.NativeImageWidth = 0;
-                        element.NativeImageHeight = 0;
+                        _imageService.Clear(element);
                     }
                     return;
                 }
@@ -426,116 +420,17 @@ namespace EchoUI.Render.Win32
             }
         }
 
-        // --- Edit 控件管理 ---
-
-        private void CreateEditControl(Win32Element element)
-        {
-            if (_window.Hwnd == 0) return;
-
-            var hwnd = NativeInterop.CreateWindowEx(
-                0,
-                "EDIT",
-                "",
-                NativeInterop.WS_CHILD | NativeInterop.WS_VISIBLE | NativeInterop.ES_AUTOHSCROLL | NativeInterop.ES_LEFT,
-                0, 0, 100, 24,
-                _window.Hwnd,
-                0,
-                NativeInterop.GetModuleHandle(null),
-                0);
-
-            if (hwnd != 0)
-            {
-                element.EditHwnd = hwnd;
-                _editElements[hwnd] = element;
-                SyncEditControl(element);
-            }
-        }
-
-        private void SyncEditControl(Win32Element element)
-        {
-            if (element.EditHwnd == 0) return;
-
-            // --- 同步文本值 ---
-            if (element.InputValue != null)
-            {
-                int len = NativeInterop.GetWindowTextLength(element.EditHwnd);
-                var buffer = new char[len + 1];
-                NativeInterop.GetWindowText(element.EditHwnd, buffer, buffer.Length);
-                var currentText = new string(buffer, 0, len);
-
-                if (currentText != element.InputValue)
-                {
-                    _suppressEditNotification = true;
-                    NativeInterop.SetWindowText(element.EditHwnd, element.InputValue);
-                    _suppressEditNotification = false;
-                }
-            }
-            
-            var fontHandle = GdiText.GetFontHandle(element.FontFamily, element.FontSize > 0 ? element.FontSize : 14, element.FontWeight);
-            if (fontHandle != 0 && element.NativeFontHandle != fontHandle)
-            {
-                element.NativeFontHandle = fontHandle;
-                NativeInterop.SendMessage(element.EditHwnd, NativeInterop.WM_SETFONT, fontHandle, 1);
-            }
-
-            // 触发重绘以应用颜色
-            NativeInterop.InvalidateRect(element.EditHwnd, 0, true);
-        }
-
         /// <summary>
         /// 处理 Edit 控件的 EN_CHANGE 通知
         /// </summary>
         internal void HandleEditChange(nint editHwnd)
         {
-            if (_suppressEditNotification) return;
-
-            if (_editElements.TryGetValue(editHwnd, out var element))
-            {
-                var text = GetWindowText(editHwnd);
-                element.OnValueChanged?.Invoke(text);
-
-                var syncContext = SynchronizationContext.Current;
-                if (syncContext != null)
-                {
-                    syncContext.Post(_ => RestoreControlledEditValue(element), null);
-                }
-                else
-                {
-                    RestoreControlledEditValue(element);
-                }
-            }
-        }
-
-        private static string GetWindowText(nint editHwnd)
-        {
-            int len = NativeInterop.GetWindowTextLength(editHwnd);
-            var buffer = new char[len + 1];
-            NativeInterop.GetWindowText(editHwnd, buffer, buffer.Length);
-            return new string(buffer, 0, len);
-        }
-
-        private void RestoreControlledEditValue(Win32Element element)
-        {
-            if (element.EditHwnd == 0 || !NativeInterop.IsWindow(element.EditHwnd))
-                return;
-
-            var controlledValue = element.InputValue ?? string.Empty;
-            var currentValue = GetWindowText(element.EditHwnd);
-            if (currentValue == controlledValue)
-                return;
-
-            _suppressEditNotification = true;
-            NativeInterop.SetWindowText(element.EditHwnd, controlledValue);
-            _suppressEditNotification = false;
+            _nativeInputService.HandleChange(editHwnd);
         }
 
         internal void HandleEditFocusChange(nint editHwnd, bool isFocused)
         {
-            if (_editElements.TryGetValue(editHwnd, out var element))
-            {
-                element.IsFocused = isFocused;
-                RequestRepaint(element);
-            }
+            _nativeInputService.HandleFocusChange(editHwnd, isFocused);
         }
 
         private void ReleaseElementTree(Win32Element element)
@@ -555,32 +450,9 @@ namespace EchoUI.Render.Win32
 
         private void ReleasePlatformResources(Win32Element element)
         {
-            if (element.EditHwnd != 0)
-            {
-                _editElements.Remove(element.EditHwnd);
-
-                element.NativeFontHandle = 0;
-                element.NativeBrushHandle = 0;
-
-                if (NativeInterop.IsWindow(element.EditHwnd))
-                    NativeInterop.DestroyWindow(element.EditHwnd);
-                element.EditHwnd = 0;
-            }
-            else
-            {
-                element.NativeFontHandle = 0;
-                element.NativeBrushHandle = 0;
-            }
-
+            _nativeInputService.Release(element);
             GdiPainter.ReleaseCachedResources(element);
-
-            if (element.NativeImageHandle != 0)
-            {
-                NativeInterop.DeleteObject(element.NativeImageHandle);
-                element.NativeImageHandle = 0;
-                element.NativeImageWidth = 0;
-                element.NativeImageHeight = 0;
-            }
+            _imageService.Clear(element);
         }
 
         public void Dispose()
@@ -599,7 +471,6 @@ namespace EchoUI.Render.Win32
 
             _rootInstance = null;
             _floatingElements.Clear();
-            _editElements.Clear();
         }
 
         // --- 布局与重绘 ---
@@ -645,7 +516,7 @@ namespace EchoUI.Render.Win32
 
             LayoutEngine.UpdateAbsoluteLayout(scrollTarget);
             SyncInstanceLayouts();
-            UpdateEditPositions(scrollTarget, vpW, vpH);
+            _nativeInputService.UpdatePositions(scrollTarget, vpW, vpH);
             RequestRepaint(scrollTarget);
         }
 
@@ -669,7 +540,7 @@ namespace EchoUI.Render.Win32
 #endif
 
             SyncInstanceLayouts();
-            UpdateEditPositions(_rootElement, vpW, vpH);
+            _nativeInputService.UpdatePositions(_rootElement, vpW, vpH);
             CollectFloatingElements();
             _layoutViewportWidth = vpW;
             _layoutViewportHeight = vpH;
@@ -863,173 +734,14 @@ namespace EchoUI.Render.Win32
         public void UpdateAllEditPositions(float vpW, float vpH)
         {
             if (_rootElement != null)
-                UpdateEditPositions(_rootElement, vpW, vpH);
+                _nativeInputService.UpdatePositions(_rootElement, vpW, vpH);
         }
-
-        /// <summary>
-        /// 更新所有 Edit 控件的位置以匹配布局结果
-        /// </summary>
-        private void UpdateEditPositions(Win32Element element, float vpW, float vpH)
-        {
-            if (element.EditHwnd != 0)
-            {
-                var padding = ResolvePadding(element.Padding, element.LayoutWidth, vpW, vpH);
-                float border = GetBorderInset(element);
-
-                float contentX = element.AbsoluteX + padding.Left + border;
-                float contentY = element.AbsoluteY + padding.Top + border;
-                float contentW = Math.Max(0, element.LayoutWidth - padding.Left - padding.Right - border * 2);
-                float contentH = Math.Max(0, element.LayoutHeight - padding.Top - padding.Bottom - border * 2);
-                float editH = Math.Min(contentH, GetEditPreferredHeight(element));
-                float editY = contentY + Math.Max(0, (contentH - editH) / 2f);
-
-                int x = (int)Math.Floor(contentX);
-                int y = (int)Math.Round(editY, MidpointRounding.AwayFromZero);
-                int w = (int)Math.Ceiling(contentW);
-                int h = Math.Max(1, (int)Math.Round(editH, MidpointRounding.AwayFromZero));
-
-                var editRect = new RectF(x, y, w, h);
-                var clipRect = GetEditClipRect(element, vpW, vpH);
-                var visibleRect = RectF.Intersect(editRect, clipRect);
-
-                if (visibleRect.Width <= 0 || visibleRect.Height <= 0 || w <= 0 || h <= 0)
-                {
-                    NativeInterop.ShowWindow(element.EditHwnd, NativeInterop.SW_HIDE);
-                }
-                else
-                {
-                    NativeInterop.ShowWindow(element.EditHwnd, NativeInterop.SW_SHOW);
-                    NativeInterop.MoveWindow(
-                        element.EditHwnd,
-                        x,
-                        y,
-                        w,
-                        h,
-                        true);
-                    ApplyEditClipRegion(element.EditHwnd, editRect, visibleRect);
-                }
-            }
-
-            foreach (var child in element.Children)
-            {
-                UpdateEditPositions(child, vpW, vpH);
-            }
-        }
-
-        private RectF GetEditClipRect(Win32Element element, float vpW, float vpH)
-        {
-            var clipRect = new RectF(0, 0, vpW, vpH);
-            var current = element.Parent;
-
-            while (current != null)
-            {
-                if (current.Overflow != Overflow.Visible)
-                {
-                    clipRect = RectF.Intersect(clipRect, current.GetAbsoluteBounds());
-                }
-
-                if (current.Float)
-                    break;
-
-                current = current.Parent;
-            }
-
-            return clipRect;
-        }
-
-        private static void ApplyEditClipRegion(nint hwnd, RectF editRect, RectF visibleRect)
-        {
-            if (visibleRect.Left <= editRect.Left && visibleRect.Top <= editRect.Top &&
-                visibleRect.Right >= editRect.Right && visibleRect.Bottom >= editRect.Bottom)
-            {
-                NativeInterop.SetWindowRgn(hwnd, 0, true);
-                return;
-            }
-
-            int left = Math.Max(0, (int)Math.Floor(visibleRect.Left - editRect.Left));
-            int top = Math.Max(0, (int)Math.Floor(visibleRect.Top - editRect.Top));
-            int right = Math.Max(left, (int)Math.Ceiling(visibleRect.Right - editRect.Left));
-            int bottom = Math.Max(top, (int)Math.Ceiling(visibleRect.Bottom - editRect.Top));
-
-            var region = NativeInterop.CreateRectRgn(left, top, right, bottom);
-            if (region == 0) return;
-
-            if (NativeInterop.SetWindowRgn(hwnd, region, true) == 0)
-            {
-                NativeInterop.DeleteObject(region);
-            }
-        }
-
-        private static float GetEditPreferredHeight(Win32Element element)
-        {
-            var fontSize = element.FontSize > 0 ? element.FontSize : 14f;
-            return GdiText.GetPreferredLineHeight(element.FontFamily, fontSize, element.FontWeight) + 1f;
-        }
-
-        private static float GetBorderInset(Win32Element element)
-        {
-            return element.BorderStyle == Core.BorderStyle.None ? 0 : Math.Max(0, element.BorderWidth);
-        }
-
-        private (float Left, float Top, float Right, float Bottom) ResolvePadding(Spacing? padding, float width, float vpW, float vpH)
-        {
-            if (padding == null) return (0, 0, 0, 0);
-            return (
-                ResolveDimension(padding.Value.Left, width, vpW, vpH),
-                ResolveDimension(padding.Value.Top, width, vpW, vpH),
-                ResolveDimension(padding.Value.Right, width, vpW, vpH),
-                ResolveDimension(padding.Value.Bottom, width, vpW, vpH)
-            );
-        }
-
-        private float ResolveDimension(Dimension? d, float parentSize, float vpW, float vpH)
-        {
-            if (d == null) return 0;
-            return d.Value.Unit switch
-            {
-                DimensionUnit.Pixels => d.Value.Value,
-                DimensionUnit.Percent => parentSize * d.Value.Value / 100f,
-                DimensionUnit.ViewportHeight => vpH * d.Value.Value / 100f,
-                _ => 0
-            };
-        }
-
 
         private static void ResetNativeStyle(Win32Element element)
         {
             element.Width = null;
             element.Height = null;
             element.BorderRadius = 0;
-        }
-
-        private void LoadImage(Win32Element element, string src)
-        {
-            try
-            {
-                string? path = null;
-                if (Path.IsPathRooted(src) && File.Exists(src))
-                {
-                    path = src;
-                }
-                else
-                {
-                    // 尝试从当前目录加载
-                    var currentDir = AppContext.BaseDirectory;
-                    var p1 = Path.Combine(currentDir, src.TrimStart('/', '\\'));
-                    if (File.Exists(p1)) path = p1;
-                }
-
-                if (path != null && WicImageLoader.TryLoadBitmap(path, out var bitmap, out var width, out var height))
-                {
-                    if (element.NativeImageHandle != 0)
-                        NativeInterop.DeleteObject(element.NativeImageHandle);
-
-                    element.NativeImageHandle = bitmap;
-                    element.NativeImageWidth = width;
-                    element.NativeImageHeight = height;
-                }
-            }
-            catch { /* 忽略加载错误 */ }
         }
 
         private void ParseStyle(Win32Element element, string style)
@@ -1066,8 +778,12 @@ namespace EchoUI.Render.Win32
 
         internal Win32Element? GetElementByEditHwnd(nint hwnd)
         {
-            _editElements.TryGetValue(hwnd, out var element);
-            return element;
+            return _nativeInputService.GetElement(hwnd);
+        }
+
+        internal void UpdateImePosition(Win32Element? element)
+        {
+            _inputMethodService.UpdatePosition(element);
         }
     }
 }

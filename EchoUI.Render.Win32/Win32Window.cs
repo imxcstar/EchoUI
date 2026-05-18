@@ -161,7 +161,7 @@ namespace EchoUI.Render.Win32
 
                 case NativeInterop.WM_IME_STARTCOMPOSITION:
                     if (_renderer?.HitTestManager.FocusedElement != null)
-                        UpdateImePosition(_renderer.HitTestManager.FocusedElement);
+            _renderer.UpdateImePosition(_renderer.HitTestManager.FocusedElement);
                     _renderer?.HitTestManager.HandleTextComposition(new TextCompositionEvent
                     {
                         Phase = TextCompositionPhase.Start
