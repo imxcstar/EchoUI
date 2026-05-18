@@ -1,4 +1,4 @@
-﻿namespace EchoUI.Core
+namespace EchoUI.Core
 {
     /// <summary>
     /// 存储由 Reconciler 计算出的、与渲染器无关的通用属性变更集。
@@ -41,9 +41,22 @@
         void RemoveChild(object parent, object child);
         void MoveChild(object parent, object child, int newIndex);
 
-        TextMeasurementResult MeasureText(TextMeasurementRequest request);
-        Task<string> ReadClipboardTextAsync();
-        Task WriteClipboardTextAsync(string text);
+        IPlatformServices PlatformServices { get; }
+
+        TextMeasurementResult MeasureText(TextMeasurementRequest request)
+        {
+            return PlatformServices.TextMeasurer.Measure(request);
+        }
+
+        Task<string> ReadClipboardTextAsync()
+        {
+            return PlatformServices.Clipboard.ReadTextAsync();
+        }
+
+        Task WriteClipboardTextAsync(string text)
+        {
+            return PlatformServices.Clipboard.WriteTextAsync(text);
+        }
 
         IUpdateScheduler GetScheduler(object rootContainer);
     }

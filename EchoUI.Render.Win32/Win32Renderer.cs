@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Diagnostics;
 using EchoUI.Core;
 
@@ -42,10 +41,12 @@ namespace EchoUI.Render.Win32
         internal ComponentInstance? RootInstance => _rootInstance;
         internal Win32UpdateScheduler? Scheduler => _scheduler;
         internal HitTestManager<Win32Element> HitTestManager => _hitTestManager!;
+        public IPlatformServices PlatformServices { get; }
 
         public Win32Renderer(Win32Window window)
         {
             _window = window;
+            PlatformServices = new Win32PlatformServices();
             _hitTestManager = new HitTestManager<Win32Element>(new HitTestPlatform<Win32Element>
             {
                 GetFloatingElements = () => _floatingElements,
@@ -260,7 +261,7 @@ namespace EchoUI.Render.Win32
 
         public TextMeasurementResult MeasureText(TextMeasurementRequest request)
         {
-            return GdiText.MeasureText(request.Text, request.FontFamily, request.FontSize ?? 14f, request.FontWeight);
+            return PlatformServices.TextMeasurer.Measure(request);
         }
 
         private static TextMeasurementResult MeasureTextForLayout(Win32Element element, float? widthConstraint, bool noWrap)
@@ -271,13 +272,12 @@ namespace EchoUI.Render.Win32
 
         public Task<string> ReadClipboardTextAsync()
         {
-            return Task.FromResult(ReadClipboardText());
+            return PlatformServices.Clipboard.ReadTextAsync();
         }
 
         public Task WriteClipboardTextAsync(string text)
         {
-            WriteClipboardText(text ?? string.Empty);
-            return Task.CompletedTask;
+            return PlatformServices.Clipboard.WriteTextAsync(text);
         }
 
         public IUpdateScheduler GetScheduler(object rootContainer)
@@ -624,84 +624,6 @@ namespace EchoUI.Render.Win32
                 default:
                     ReportNativeDiagnostic($"[EchoUI.Win32] Native event '{eventName}' is not supported.");
                     return;
-            }
-        }
-
-        private static string ReadClipboardText()
-        {
-            if (!NativeInterop.OpenClipboard(0))
-                return string.Empty;
-
-            try
-            {
-                if (!NativeInterop.IsClipboardFormatAvailable(NativeInterop.CF_UNICODETEXT))
-                    return string.Empty;
-
-                var handle = NativeInterop.GetClipboardData(NativeInterop.CF_UNICODETEXT);
-                if (handle == 0)
-                    return string.Empty;
-
-                var pointer = NativeInterop.GlobalLock(handle);
-                if (pointer == 0)
-                    return string.Empty;
-
-                try
-                {
-                    return Marshal.PtrToStringUni(pointer) ?? string.Empty;
-                }
-                finally
-                {
-                    NativeInterop.GlobalUnlock(handle);
-                }
-            }
-            finally
-            {
-                NativeInterop.CloseClipboard();
-            }
-        }
-
-        private static void WriteClipboardText(string text)
-        {
-            if (!NativeInterop.OpenClipboard(0))
-                return;
-
-            nint handle = 0;
-            try
-            {
-                NativeInterop.EmptyClipboard();
-
-                var normalizedText = text ?? string.Empty;
-                var bytes = System.Text.Encoding.Unicode.GetBytes(normalizedText + '\0');
-                handle = NativeInterop.GlobalAlloc(NativeInterop.GMEM_MOVEABLE, (nuint)bytes.Length);
-                if (handle == 0)
-                    return;
-
-                var pointer = NativeInterop.GlobalLock(handle);
-                if (pointer == 0)
-                    return;
-
-                try
-                {
-                    Marshal.Copy(bytes, 0, pointer, bytes.Length);
-                }
-                finally
-                {
-                    NativeInterop.GlobalUnlock(handle);
-                }
-
-                if (NativeInterop.SetClipboardData(NativeInterop.CF_UNICODETEXT, handle) != 0)
-                {
-                    handle = 0;
-                }
-            }
-            finally
-            {
-                if (handle != 0)
-                {
-                    NativeInterop.GlobalFree(handle);
-                }
-
-                NativeInterop.CloseClipboard();
             }
         }
 

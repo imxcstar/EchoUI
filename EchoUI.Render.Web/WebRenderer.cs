@@ -21,9 +21,12 @@ namespace EchoUI.Render.Web
         private readonly Dictionary<string, List<string>> _childrenByParent = new();
         private readonly Dictionary<string, string> _parentByChild = new();
 
+        public IPlatformServices PlatformServices { get; }
+
         public WebRenderer(string rootContainerId)
         {
             _rootContainerId = rootContainerId;
+            PlatformServices = new WebPlatformServices();
         }
 
         public object CreateElement(string type)
@@ -73,20 +76,17 @@ namespace EchoUI.Render.Web
 
         public TextMeasurementResult MeasureText(TextMeasurementRequest request)
         {
-            var text = request.Text ?? string.Empty;
-            var width = (float)DomInterop.MeasureText(text, request.FontFamily, request.FontSize ?? 14f, request.FontWeight);
-            var height = request.FontSize ?? 14f;
-            return new TextMeasurementResult(width, height);
+            return PlatformServices.TextMeasurer.Measure(request);
         }
 
         public Task<string> ReadClipboardTextAsync()
         {
-            return DomInterop.ReadClipboardText();
+            return PlatformServices.Clipboard.ReadTextAsync();
         }
 
         public Task WriteClipboardTextAsync(string text)
         {
-            return DomInterop.WriteClipboardText(text ?? string.Empty);
+            return PlatformServices.Clipboard.WriteTextAsync(text);
         }
 
         public void PatchProperties(object nativeElement, Props newProps, PropertyPatch patch)
