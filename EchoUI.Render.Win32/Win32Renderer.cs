@@ -137,7 +137,7 @@ namespace EchoUI.Render.Win32
                     {
                         if (patch.UpdatedProperties.ContainsKey(kvp.Key))
                         {
-                            matched.Add((kvp.Key, Win32AnimationManager.GetPropertyValue(element, kvp.Key)));
+                            matched.Add((kvp.Key, _animationManager.GetPropertyValue(element, kvp.Key)));
                             if (kvp.Value is Transition tr)
                                 matchedTrans.Add(tr);
                         }
@@ -178,7 +178,7 @@ namespace EchoUI.Render.Win32
                 for (int i = 0; i < animatedProps.Length; i++)
                 {
                     var (propName, oldValue) = animatedProps[i];
-                    var newValue = Win32AnimationManager.GetPropertyValue(element, propName);
+                    var newValue = _animationManager.GetPropertyValue(element, propName);
                     _animationManager.StartAnimation(element, propName, oldValue, newValue, transitions[i]);
                 }
             }
