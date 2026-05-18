@@ -20,7 +20,7 @@ public static class Showcase
         ("Layout",     "📐", "layout",     LayoutPage),
         ("Cards",      "🃏", "cards",      CardsPage),
         ("Counter",    "🔢", "counter",    CounterPage),
-        ("Markdown",   "📝", "markdown",   MarkdownPage),
+        //("Markdown",   "📝", "markdown",   MarkdownPage),
         ("Diagnostics", "🧪", "diagnostics", DiagnosticsPage),
     ];
 

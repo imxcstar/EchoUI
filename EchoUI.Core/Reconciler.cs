@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -333,36 +332,28 @@ namespace EchoUI.Core
 
         #region Props Diffing Logic
 
-        [UnconditionalSuppressMessage("AOT", "IL2067", Justification = "Props 属性类型在 AOT 编译时会被保留")]
-        [UnconditionalSuppressMessage("AOT", "IL2072", Justification = "Props 属性类型在 AOT 编译时会被保留")]
         private PropertyPatch? CreateInitialPatch(Props props)
         {
             var patch = new PropertyPatch { UpdatedProperties = new Dictionary<string, object?>() };
             var hasContent = false;
 
-            foreach (var propInfo in props.GetType().GetProperties())
+            foreach (var prop in PropsMetadata.Get(props))
             {
-                if (propInfo.Name == nameof(Props.Children)) continue;
-
-                // Handle NativeProps.Properties by unpacking its contents
-                if (propInfo.Name == nameof(NativeProps.Properties) && props is NativeProps nativeProps && nativeProps.Properties != null)
+                var value = prop.Getter(props);
+                if (!Equals(value, prop.DefaultValue))
                 {
-                    foreach (var kvp in nativeProps.Properties.Value.Data)
-                    {
-                        // We add all values, even if null, because they are explicitly set.
-                        patch.UpdatedProperties[kvp.Key] = kvp.Value;
-                        hasContent = true;
-                    }
-                    continue; // Skip adding the 'Properties' object itself to the patch.
+                    patch.UpdatedProperties[prop.Name] = value;
+                    hasContent = true;
                 }
+            }
 
-                var value = propInfo.GetValue(props);
-
-                // For other properties, add them if they are not the default value.
-                var defaultValue = propInfo.PropertyType.IsValueType ? Activator.CreateInstance(propInfo.PropertyType) : null;
-                if (value != null && !value.Equals(defaultValue))
+            // Handle NativeProps.Properties by unpacking its contents.
+            if (props is NativeProps nativeProps && nativeProps.Properties != null)
+            {
+                foreach (var kvp in nativeProps.Properties.Value.Data)
                 {
-                    patch.UpdatedProperties[propInfo.Name] = value;
+                    // We add all values, even if null, because they are explicitly set.
+                    patch.UpdatedProperties[kvp.Key] = kvp.Value;
                     hasContent = true;
                 }
             }
@@ -375,73 +366,59 @@ namespace EchoUI.Core
             var patch = new PropertyPatch();
             var updatedProperties = new Dictionary<string, object?>();
             var hasChanges = false;
+            var processed = new HashSet<string>(StringComparer.Ordinal);
 
-            var allPropNames = newProps.GetType().GetProperties().Select(p => p.Name)
-                .Union(oldProps.GetType().GetProperties().Select(p => p.Name))
-                .Distinct();
-
-            foreach (var propName in allPropNames)
+            foreach (var prop in PropsMetadata.Get(newProps).Concat(PropsMetadata.Get(oldProps)))
             {
-                if (propName == nameof(Props.Children)) continue;
+                if (!processed.Add(prop.Name))
+                    continue;
 
-                // Special handling for NativeProps.Properties
-                if (propName == nameof(NativeProps.Properties) && (oldProps is NativeProps || newProps is NativeProps))
-                {
-                    var oldNativeProps = oldProps as NativeProps;
-                    var newNativeProps = newProps as NativeProps;
+                var oldValue = TryGetPropertyValue(oldProps, prop.Name, out var oldKnown) ? oldKnown : prop.DefaultValue;
+                var newValue = TryGetPropertyValue(newProps, prop.Name, out var newKnown) ? newKnown : prop.DefaultValue;
 
-                    var oldDict = oldNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
-                    var newDict = newNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
-                    var allKeys = oldDict.Keys.Union(newDict.Keys).Distinct();
-
-                    foreach (var key in allKeys)
-                    {
-                        oldDict.TryGetValue(key, out var oldPropValue);
-                        newDict.TryGetValue(key, out var newPropValue);
-
-                        bool propertyValueChanged;
-                        var propValueType = newPropValue?.GetType() ?? oldPropValue?.GetType();
-
-                        if (propValueType != null && typeof(Delegate).IsAssignableFrom(propValueType))
-                        {
-                            propertyValueChanged = (oldPropValue == null) != (newPropValue == null);
-                        }
-                        else
-                        {
-                            propertyValueChanged = !Equals(oldPropValue, newPropValue);
-                        }
-
-                        if (propertyValueChanged)
-                        {
-                            updatedProperties[key] = newPropValue; // newPropValue will be null if the key was removed
-                            hasChanges = true;
-                        }
-                    }
-                    continue; // Skip the generic diff for the 'Properties' property itself
-                }
-
-                var oldPropInfo = oldProps.GetType().GetProperty(propName);
-                var newPropInfo = newProps.GetType().GetProperty(propName);
-
-                var oldValue = oldPropInfo?.GetValue(oldProps);
-                var newValue = newPropInfo?.GetValue(newProps);
-
-                bool propertyChanged;
-                var propType = newPropInfo?.PropertyType ?? oldPropInfo?.PropertyType;
-
-                if (propType != null && typeof(Delegate).IsAssignableFrom(propType))
-                {
-                    propertyChanged = (oldValue == null) != (newValue == null);
-                }
-                else
-                {
-                    propertyChanged = !Equals(oldValue, newValue);
-                }
+                var propertyChanged = prop.IsDelegate
+                    ? (oldValue == null) != (newValue == null)
+                    : !Equals(oldValue, newValue);
 
                 if (propertyChanged)
                 {
-                    updatedProperties[propName] = newValue;
+                    updatedProperties[prop.Name] = newValue;
                     hasChanges = true;
+                }
+            }
+
+            // Special handling for NativeProps.Properties.
+            if (oldProps is NativeProps || newProps is NativeProps)
+            {
+                var oldNativeProps = oldProps as NativeProps;
+                var newNativeProps = newProps as NativeProps;
+
+                var oldDict = oldNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
+                var newDict = newNativeProps?.Properties?.Data ?? new Dictionary<string, object?>();
+                var allKeys = oldDict.Keys.Union(newDict.Keys).Distinct();
+
+                foreach (var key in allKeys)
+                {
+                    oldDict.TryGetValue(key, out var oldPropValue);
+                    newDict.TryGetValue(key, out var newPropValue);
+
+                    bool propertyValueChanged;
+                    var propValueType = newPropValue?.GetType() ?? oldPropValue?.GetType();
+
+                    if (propValueType != null && typeof(Delegate).IsAssignableFrom(propValueType))
+                    {
+                        propertyValueChanged = (oldPropValue == null) != (newPropValue == null);
+                    }
+                    else
+                    {
+                        propertyValueChanged = !Equals(oldPropValue, newPropValue);
+                    }
+
+                    if (propertyValueChanged)
+                    {
+                        updatedProperties[key] = newPropValue; // newPropValue will be null if the key was removed
+                        hasChanges = true;
+                    }
                 }
             }
 
@@ -452,6 +429,21 @@ namespace EchoUI.Core
             }
 
             return null;
+        }
+
+        private static bool TryGetPropertyValue(Props props, string name, out object? value)
+        {
+            foreach (var prop in PropsMetadata.Get(props))
+            {
+                if (prop.Name == name)
+                {
+                    value = prop.Getter(props);
+                    return true;
+                }
+            }
+
+            value = null;
+            return false;
         }
 
         #endregion
