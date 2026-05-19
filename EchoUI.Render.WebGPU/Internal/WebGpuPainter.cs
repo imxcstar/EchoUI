@@ -1,3 +1,4 @@
+using System.Numerics;
 using EchoUI.Core;
 using EchoUI.Render.Win32;
 using WebGPU;
@@ -73,23 +74,43 @@ internal sealed class WebGpuPainter
     {
         if (el.LayoutWidth <= 0 || el.LayoutHeight <= 0)
             return;
-        // Skip if entirely outside current scissor
+
+        // Transform：与 GdiPainter 一致 —— 围绕 (layout.X + W*originX, layout.Y + H*originY) 应用
+        // translate/rotate/scale/skew。变换矩阵以 row-vector 方式叠加 (M_self * M_parent)，使
+        // 旋转/缩放等会自然作用到所有后代。
+        bool hasTransform = !el.Transform.IsEmpty;
+        Matrix3x2 savedMatrix = default;
+        if (hasTransform)
+        {
+            float ox = el.AbsoluteX + el.LayoutWidth * el.TransformOrigin.X;
+            float oy = el.AbsoluteY + el.LayoutHeight * el.TransformOrigin.Y;
+            var local = BuildTransformMatrix(ox, oy, el.Transform);
+            // 当前批已有矩阵 M_parent，子层在它之上再套上自己的 local：v * (local * M_parent)
+            // 但 SetTransform 是覆盖式 API，所以这里手动取出 + 组合。
+            var combined = local * _batch.CurrentMatrix;
+            savedMatrix = _batch.SetTransform(combined);
+        }
+
+        // Skip if entirely outside current scissor — 旋转下 axis-aligned 测试不准，跳过此优化。
         var cur = _scissorStack.Peek();
-        if (el.AbsoluteX + el.LayoutWidth < cur.X || el.AbsoluteX > cur.X + cur.W ||
-            el.AbsoluteY + el.LayoutHeight < cur.Y || el.AbsoluteY > cur.Y + cur.H)
+        if (!hasTransform && _batch.CurrentMatrix.IsIdentity &&
+            (el.AbsoluteX + el.LayoutWidth < cur.X || el.AbsoluteX > cur.X + cur.W ||
+             el.AbsoluteY + el.LayoutHeight < cur.Y || el.AbsoluteY > cur.Y + cur.H))
         {
             return;
         }
 
-        bool clip = el.Overflow != Overflow.Visible;
-        if (clip)
+        // 注意：与 PaintEngine / GdiPainter 保持一致 —— 元素自身的 shadow/background/border 不受
+        // 自己的 overflow:hidden 裁剪，PushClip 只作用于 children。所以这里先画自身，再 push scissor。
+
+        // Box shadow（与 GdiPainter / Win32CommandExecutor.DrawShadow 同一套分层算法）：
+        // 在自身绘制前画 N 层圆角矩形，每层向外扩展 expand=blur*t、alpha 衰减，叠加成软阴影。
+        // 仅对容器/Input/未知 native 应用（与 PaintEngine 的 AddContainerNodeCommands 一致）。
+        if (el.Shadow.IsVisible
+            && el.ElementType != ElementCoreName.Text
+            && el.ElementType != "img")
         {
-            var pushed = new ScissorRect(
-                (int)el.AbsoluteX, (int)el.AbsoluteY,
-                (int)Math.Ceiling(el.LayoutWidth), (int)Math.Ceiling(el.LayoutHeight))
-                .Intersect(cur);
-            _scissorStack.Push(pushed);
-            ApplyScissor();
+            DrawShadow(el);
         }
 
         // Draw self
@@ -115,6 +136,18 @@ internal sealed class WebGpuPainter
                 break;
         }
 
+        // 自身绘制完成 → 现在 push scissor 给 children 用
+        bool clip = el.Overflow != Overflow.Visible;
+        if (clip)
+        {
+            var pushed = new ScissorRect(
+                (int)el.AbsoluteX, (int)el.AbsoluteY,
+                (int)Math.Ceiling(el.LayoutWidth), (int)Math.Ceiling(el.LayoutHeight))
+                .Intersect(cur);
+            _scissorStack.Push(pushed);
+            ApplyScissor();
+        }
+
         // Children — Note: LayoutEngine already applies parent.ScrollOffsetX/Y to child.AbsoluteX/Y,
         // so no additional translation is needed here.
         foreach (var child in el.Children)
@@ -128,6 +161,40 @@ internal sealed class WebGpuPainter
             _scissorStack.Pop();
             ApplyScissor();
         }
+
+        if (hasTransform)
+        {
+            _batch.SetTransform(savedMatrix);
+        }
+    }
+
+    /// <summary>构建围绕 (ox, oy) 应用 transform.Functions 的 row-vector 2D 矩阵：
+    /// M = T(-ox,-oy) * F1 * F2 * ... * Fn * T(+ox,+oy)。与 GdiPainter.BuildTransformMatrix 等价。</summary>
+    private static Matrix3x2 BuildTransformMatrix(float ox, float oy, Transform transform)
+    {
+        var m = Matrix3x2.CreateTranslation(-ox, -oy);
+        foreach (var fn in transform.Functions)
+        {
+            switch (fn)
+            {
+                case TranslateTransform t:
+                    m *= Matrix3x2.CreateTranslation(t.X, t.Y);
+                    break;
+                case ScaleTransform s:
+                    m *= Matrix3x2.CreateScale(s.X, s.Y);
+                    break;
+                case RotateTransform r:
+                    m *= Matrix3x2.CreateRotation(r.AngleDeg * MathF.PI / 180f);
+                    break;
+                case SkewTransform k:
+                    m *= Matrix3x2.CreateSkew(
+                        k.XDeg * MathF.PI / 180f,
+                        k.YDeg * MathF.PI / 180f);
+                    break;
+            }
+        }
+        m *= Matrix3x2.CreateTranslation(ox, oy);
+        return m;
     }
 
     private void DrawBox(Win32Element el)
@@ -135,7 +202,8 @@ internal sealed class WebGpuPainter
         var bg = el.BackgroundColor ?? default;
         Color borderColor = default;
         float borderW = 0;
-        if (el.BorderStyle != BorderStyle.None)
+        var borderStyle = el.BorderStyle;
+        if (borderStyle != BorderStyle.None)
         {
             var bc = el.IsFocused && el.FocusedBorderColor.HasValue
                 ? el.FocusedBorderColor!.Value
@@ -151,11 +219,20 @@ internal sealed class WebGpuPainter
             return;
 
         _batch.SetTexture(_textures.WhiteTextureView, _pipeline.LinearSampler);
+
+        // Dashed/Dotted 边框：让 SDF shader 只画填充（不画边），边框用一串短线段单独贴。
+        bool customBorder = borderW > 0 && (borderStyle == BorderStyle.Dashed || borderStyle == BorderStyle.Dotted);
+
         _batch.AddRect(
             el.AbsoluteX, el.AbsoluteY, el.LayoutWidth, el.LayoutHeight,
-            bg, borderColor, borderW, el.BorderRadius,
+            bg, customBorder ? default : borderColor, customBorder ? 0 : borderW, el.BorderRadius,
             0, 0, 1, 1,
             hasTexture: false, isAlphaMask: false);
+
+        if (customBorder)
+        {
+            DrawDashedBorder(el, borderColor, borderW, borderStyle);
+        }
     }
 
     private void DrawImage(Win32Element el)
@@ -220,6 +297,100 @@ internal sealed class WebGpuPainter
             y += run.H;
             if (end >= text.Length) break;
             start = end + 1;
+        }
+    }
+
+    /// <summary>多层圆角矩形堆叠模拟模糊阴影 —— 算法与 Win32CommandExecutor.DrawShadow 完全一致，
+    /// 保证 GDI 与 WebGPU 视觉一致。</summary>
+    private void DrawShadow(Win32Element el)
+    {
+        var shadow = el.Shadow;
+        float blur = MathF.Max(0, shadow.Blur);
+        float br = el.BorderRadius;
+
+        _batch.SetTexture(_textures.WhiteTextureView, _pipeline.LinearSampler);
+
+        if (blur <= 0)
+        {
+            // 硬阴影：直接画一个偏移的实色矩形。
+            _batch.AddRect(
+                el.AbsoluteX, el.AbsoluteY + shadow.OffsetY,
+                el.LayoutWidth, el.LayoutHeight,
+                shadow.Color, default, 0, br,
+                0, 0, 1, 1,
+                hasTexture: false, isAlphaMask: false);
+            return;
+        }
+
+        int layerCount = Math.Clamp((int)MathF.Ceiling(blur), 3, 18);
+        int maxAlpha = Math.Min(shadow.Color.A, (byte)120);
+
+        for (int layer = layerCount; layer >= 1; layer--)
+        {
+            float t = layer / (float)layerCount;
+            float expand = blur * t;
+            double weight = Math.Pow(1 - t * 0.75f, 2);
+            int alpha = Math.Clamp((int)Math.Round(maxAlpha * weight / 3), 0, 255);
+            if (alpha <= 0) continue;
+
+            var c = shadow.Color.WithAlpha((byte)alpha);
+            _batch.AddRect(
+                el.AbsoluteX - expand,
+                el.AbsoluteY,
+                el.LayoutWidth + expand * 2,
+                el.LayoutHeight + shadow.OffsetY + expand,
+                c, default, 0, br + expand,
+                0, 0, 1, 1,
+                hasTexture: false, isAlphaMask: false);
+        }
+    }
+
+    /// <summary>沿矩形边缘按 dash/dot 节奏画一串小段，模拟 GDI PS_DASH / PS_DOT 边框。
+    /// 简化处理：圆角段直接被切，不沿圆弧走（与 GDI 在大圆角下也不完美贴合）。</summary>
+    private void DrawDashedBorder(Win32Element el, Color color, float borderW, BorderStyle style)
+    {
+        // dash 节奏（像素）：与 GDI PS_DASH ≈ 4*w on / 2*w off；PS_DOT ≈ 1*w on / 2*w off
+        float w = MathF.Max(1, borderW);
+        float dash = style == BorderStyle.Dotted ? w : w * 4f;
+        float gap = style == BorderStyle.Dotted ? w * 2f : w * 2f;
+
+        float x = el.AbsoluteX;
+        float y = el.AbsoluteY;
+        float W = el.LayoutWidth;
+        float H = el.LayoutHeight;
+
+        // 四条边在内侧画（与 SDF 边框一致），半边宽贴合 rect 内边缘。
+        float inset = w * 0.5f;
+
+        // top
+        DashLine(x + inset, y + inset, W - w, true, dash, gap, w, color);
+        // bottom
+        DashLine(x + inset, y + H - inset - w, W - w, true, dash, gap, w, color);
+        // left
+        DashLine(x + inset, y + inset, H - w, false, dash, gap, w, color);
+        // right
+        DashLine(x + W - inset - w, y + inset, H - w, false, dash, gap, w, color);
+    }
+
+    private void DashLine(float x, float y, float length, bool horizontal, float dash, float gap, float thickness, Color color)
+    {
+        if (length <= 0) return;
+        float period = dash + gap;
+        if (period <= 0) period = dash + 1;
+
+        float cursor = 0;
+        while (cursor < length)
+        {
+            float segLen = MathF.Min(dash, length - cursor);
+            if (segLen <= 0) break;
+            float rx = horizontal ? x + cursor : x;
+            float ry = horizontal ? y : y + cursor;
+            float rw = horizontal ? segLen : thickness;
+            float rh = horizontal ? thickness : segLen;
+            _batch.AddRect(rx, ry, rw, rh, color, default, 0, 0,
+                0, 0, 1, 1,
+                hasTexture: false, isAlphaMask: false);
+            cursor += period;
         }
     }
 }

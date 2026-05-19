@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using EchoUI.Core;
@@ -43,6 +44,10 @@ internal sealed unsafe class UiBatchRenderer : IDisposable
 
     private WGPUTextureView _whiteTextureView;
 
+    // 当前 2D 变换矩阵（row-vector: v' = v * M）。AddRect 内会把四个角点先经此矩阵变换再写入顶点。
+    // WebGpuPainter 在遇到带 Transform 的元素时通过 SetTransform 入栈/出栈。
+    private Matrix3x2 _currentMatrix = Matrix3x2.Identity;
+
     public UiBatchRenderer(WGPUDevice device, WGPUQueue queue, UiPipeline pipeline)
     {
         _device = device;
@@ -63,8 +68,19 @@ internal sealed unsafe class UiBatchRenderer : IDisposable
         _currentTexture = _whiteTextureView;
         _currentSampler = _pipeline.LinearSampler;
         _currentScissor = (0, 0, viewportW, viewportH);
+        _currentMatrix = Matrix3x2.Identity;
         _batchStartIndex = 0;
     }
+
+    /// <summary>设置当前 2D 变换矩阵。仅影响之后 AddRect 写入的顶点，已写入的不受影响。</summary>
+    public Matrix3x2 SetTransform(Matrix3x2 m)
+    {
+        var old = _currentMatrix;
+        _currentMatrix = m;
+        return old;
+    }
+
+    public Matrix3x2 CurrentMatrix => _currentMatrix;
 
     private void FlushBatch()
     {
@@ -145,6 +161,21 @@ internal sealed unsafe class UiBatchRenderer : IDisposable
         UiVertex v1v = v0v; v1v.PositionX = x + w; v1v.U = u1; v1v.LocalU = 1;
         UiVertex v2v = v0v; v2v.PositionX = x + w; v2v.PositionY = y + h; v2v.U = u1; v2v.V = v1; v2v.LocalU = 1; v2v.LocalV = 1;
         UiVertex v3v = v0v; v3v.PositionY = y + h; v3v.V = v1; v3v.LocalV = 1;
+
+        // 若当前存在 2D 变换（rotate/scale/skew/translate），对四个角的位置做变换后再写入。
+        // RectSize / LocalUV 仍保留 axis-aligned 信息，用于 fragment shader 的圆角/边框/AA 计算；
+        // 这意味着圆角矩形在旋转后边框逻辑仍按局部矩形坐标算（与 GDI 世界变换语义一致）。
+        if (!_currentMatrix.IsIdentity)
+        {
+            var p0 = Vector2.Transform(new Vector2(v0v.PositionX, v0v.PositionY), _currentMatrix);
+            var p1 = Vector2.Transform(new Vector2(v1v.PositionX, v1v.PositionY), _currentMatrix);
+            var p2 = Vector2.Transform(new Vector2(v2v.PositionX, v2v.PositionY), _currentMatrix);
+            var p3 = Vector2.Transform(new Vector2(v3v.PositionX, v3v.PositionY), _currentMatrix);
+            v0v.PositionX = p0.X; v0v.PositionY = p0.Y;
+            v1v.PositionX = p1.X; v1v.PositionY = p1.Y;
+            v2v.PositionX = p2.X; v2v.PositionY = p2.Y;
+            v3v.PositionX = p3.X; v3v.PositionY = p3.Y;
+        }
 
         _vertices.Add(v0v);
         _vertices.Add(v1v);
