@@ -1,3 +1,4 @@
+using EchoUI.Core;
 using EchoUI.Render.Win32;
 using EchoUI.Render.WebGPU.Internal;
 
@@ -5,8 +6,8 @@ namespace EchoUI.Render.WebGPU;
 
 /// <summary>
 /// WebGPU 渲染入口：创建配置成 WebGPU 后端的 <see cref="Win32Renderer"/>。
-/// 文本由 GDI（CLEARTYPE_QUALITY + TrueType hinting）栅格化到纹理后由 WebGPU 合成，
-/// 因此布局测量与字形渲染都使用 GDI，外观与 <see cref="GdiPainter"/> 100% 一致。
+/// 文本由 SixLabors.Fonts + ImageSharp.Drawing 栅格化到 R8 atlas 后由 WebGPU 合成；
+/// 布局测量也走同一份 SixLabors metrics（FontAtlas.MeasureText），保证测量 ↔ 绘制对齐。
 /// </summary>
 public static class WebGpuRenderer
 {
@@ -19,12 +20,19 @@ public static class WebGpuRenderer
         if (window.Hwnd == 0)
             throw new InvalidOperationException("Win32Window must be created before attaching WebGPU backend.");
 
-        // 文本测量与字形栅格化都走 GDI，无需任何度量覆盖：默认 GDI 测量结果就是绘制结果。
-        TextMeasurementHook.Override = null;
-
         var renderer = new Win32Renderer(window) { UseNativeInput = false };
         var backend = new WebGpuPaintBackend();
         backend.Attach(window.Hwnd, renderer);
+
+        // 把测量也切到 FontAtlas（SixLabors）—— 让 layout 使用与栅格化完全相同的 metrics。
+        TextMeasurementHook.Override = (text, family, size, weight, widthConstraint, noWrap) =>
+        {
+            var atlas = backend.TextAtlas;
+            if (atlas is null) return null;
+            var (w, h) = atlas.MeasureText(text, family, size, weight);
+            return new TextMeasurementResult(w, h);
+        };
+
         window.PaintBackend = backend;
         window.NotifyPaintBackendReady();
         return renderer;

@@ -10,9 +10,13 @@ using static WebGPU.WebGPU;
 namespace EchoUI.Render.WebGPU.Internal;
 
 /// <summary>
-/// 基于 SixLabors.Fonts + SixLabors.ImageSharp.Drawing 的字体字形栅格化与 R8 atlas。
-/// 单 atlas、单主字体 + 多个回退字体，多 pixel size + codepoint 共享一张纹理。
-/// 简单 shelf packing；空间不够则扩容（重建一张更大的）。
+/// 基于 SixLabors.Fonts + SixLabors.ImageSharp.Drawing 的文本 run atlas，public 表面与
+/// <see cref="GdiTextAtlas"/> 完全一致：一条文本运行（同一字体/字号/字重 + 文本内容）作为
+/// atlas 上的一个矩形 region，painter 用单个 quad 渲染整条文本。
+///
+/// 用途：跨平台后端（非 Windows / Wayland / 无 GDI 环境）可用本类替代 GdiTextAtlas，
+/// painter 调用方式不变。Windows 桌面仍建议走 GdiTextAtlas —— SixLabors.Fonts 没有
+/// TrueType hinting bytecode 解释器，12–14px 小字号竖笔会发灰。
 /// </summary>
 internal sealed unsafe class FontAtlas : IDisposable
 {
@@ -25,8 +29,11 @@ internal sealed unsafe class FontAtlas : IDisposable
     private readonly FontCollection _collection = new();
     private FontFamily _primaryFamily;
     private readonly List<FontFamily> _fallbackFamilies = new();
-    // 主字体在不同 pxSize 上的 Font 实例缓存（避免每个码点重建）
-    private readonly Dictionary<float, Font> _primaryFontCache = new();
+    // 按 family-name 查找已注册字体；不命中则退回 _primaryFamily。
+    private readonly Dictionary<string, FontFamily> _familyByName =
+        new(StringComparer.OrdinalIgnoreCase);
+    // (family-name, pxSize, weight) → Font 缓存。
+    private readonly Dictionary<(string Family, float Size, string? Weight), Font> _fontCache = new();
 
     private int _atlasW;
     private int _atlasH;
@@ -35,36 +42,115 @@ internal sealed unsafe class FontAtlas : IDisposable
     private int _shelfY;
     private int _shelfH;
 
+    // Stem darkening 查找表：cov_out = pow(cov_in/255, StemDarkenExp) * 255。
+    // 0.55 接近 FreeType / Chrome / macOS 在小字号下的笔画加粗强度；
+    // 没有 TrueType hinting 时，这是让 SimSun / 雅黑 等 CJK 字体在 12–14px 下
+    // 笔画看起来不发灰、不发幼的关键步骤。
+    private const double StemDarkenExp = 0.55;
+    private static readonly byte[] s_stemLut = BuildStemLut();
+
+    private static byte[] BuildStemLut()
+    {
+        var lut = new byte[256];
+        for (int i = 0; i < 256; i++)
+        {
+            double c = i / 255.0;
+            double o = Math.Pow(c, StemDarkenExp);
+            int v = (int)Math.Round(o * 255.0);
+            if (v < 0) v = 0; else if (v > 255) v = 255;
+            lut[i] = (byte)v;
+        }
+        return lut;
+    }
+
     public WGPUTexture Texture;
     public WGPUTextureView TextureView;
 
-    private readonly Dictionary<(float pxSize, int codepoint), Glyph> _cache = new();
-
-    public struct Glyph
+    /// <summary>
+    /// 一条文本运行在 atlas 上的位置与尺寸（与 <see cref="GdiTextAtlas.Run"/> 字段一致）。
+    /// </summary>
+    public struct Run
     {
-        public float U0, V0, U1, V1;     // atlas uv
-        public int W, H;                 // glyph bitmap size in px
-        public int XOff, YOff;           // offset from (penX, baselineY) to bitmap top-left
-        public float Advance;            // horizontal advance in px
-        public bool Empty;               // whitespace glyph (no bitmap)
+        public float U0, V0, U1, V1;
+        public int W, H;
+    }
+
+    private readonly struct RunKey : IEquatable<RunKey>
+    {
+        public readonly string Text;
+        public readonly string Family;
+        public readonly float Size;
+        public readonly string? Weight;
+        public RunKey(string text, string family, float size, string? weight)
+        { Text = text; Family = family; Size = size; Weight = weight; }
+        public bool Equals(RunKey o)
+            => Size == o.Size
+            && string.Equals(Text, o.Text, StringComparison.Ordinal)
+            && string.Equals(Family, o.Family, StringComparison.Ordinal)
+            && string.Equals(Weight, o.Weight, StringComparison.Ordinal);
+        public override bool Equals(object? obj) => obj is RunKey k && Equals(k);
+        public override int GetHashCode() => HashCode.Combine(Text, Family, Size, Weight);
+    }
+
+    private readonly Dictionary<RunKey, Run> _cache = new();
+
+    /// <summary>
+    /// 测量整段文本的像素宽高（与 <see cref="GetRun"/> 用同一字体/同一 TextOptions，
+    /// 保证布局测量与栅格化绝对对齐）。支持多行（按 '\n' 拆开取最宽行）。
+    /// </summary>
+    public (float Width, float Height) MeasureText(string? text, string? fontFamily, float fontSize, string? fontWeight)
+    {
+        // 行盒高度同 GetRun。
+        float ascent = fontSize, descent = 0, lineGap = 0;
+        if (_primaryFamily.TryGetMetrics(FontStyle.Regular, out var pm) && pm is not null)
+        {
+            float scale = fontSize / pm.UnitsPerEm;
+            ascent = pm.HorizontalMetrics.Ascender * scale;
+            descent = pm.HorizontalMetrics.Descender * scale;
+            lineGap = pm.HorizontalMetrics.LineGap * scale;
+        }
+        float lineHeight = ascent - descent + lineGap;
+        if (string.IsNullOrEmpty(text))
+            return (0f, lineHeight);
+
+        var font = GetFont(fontFamily, fontSize, fontWeight);
+        var opts = new TextOptions(font)
+        {
+            FallbackFontFamilies = _fallbackFamilies,
+            Dpi = 72f,
+        };
+
+        float maxLineW = 0;
+        int lines = 0;
+        int start = 0;
+        while (start <= text.Length)
+        {
+            int end = text.IndexOf('\n', start);
+            if (end < 0) end = text.Length;
+            int lineEnd = end;
+            if (lineEnd > start && text[lineEnd - 1] == '\r') lineEnd--;
+            string line = text.Substring(start, lineEnd - start);
+            float w = string.IsNullOrEmpty(line) ? 0 : TextMeasurer.MeasureAdvance(line, opts).Width;
+            if (w > maxLineW) maxLineW = w;
+            lines++;
+            if (end >= text.Length) break;
+            start = end + 1;
+        }
+        if (lines == 0) lines = 1;
+        return (maxLineW, lineHeight * lines);
     }
 
     public FontAtlas(WGPUDevice device, WGPUQueue queue)
     {
         _device = device;
         _queue = queue;
-    }
-
-    public void LoadFont(string path)
-    {
-        AddFont(path, asPrimary: true);
         CreateAtlas(InitialAtlasSize, InitialAtlasSize);
     }
 
-    /// <summary>
-    /// 添加一个回退字体。当主字体没有某个码点的字形时，会依次尝试后续字体。
-    /// 必须在 LoadFont 之后调用。
-    /// </summary>
+    /// <summary>设置主字体（也作为未知 family 名的回退）。</summary>
+    public void LoadFont(string path) => AddFont(path, asPrimary: true);
+
+    /// <summary>追加一个 fallback 字体（缺字时按注册顺序回退）。</summary>
     public void AddFallback(string path)
     {
         if (!File.Exists(path)) return;
@@ -76,173 +162,102 @@ internal sealed unsafe class FontAtlas : IDisposable
         if (!File.Exists(path))
             throw new FileNotFoundException("Font not found: " + path);
 
-        // SixLabors.Fonts 内部正确处理 TTC（TrueType Collection）的偏移；
-        // 对 .ttc/.otc 使用 AddCollection，其余按单一字体处理。
+        // .ttc / .otc 走 collection；其余按单文件。
         bool isCollection = path.EndsWith(".ttc", StringComparison.OrdinalIgnoreCase)
                          || path.EndsWith(".otc", StringComparison.OrdinalIgnoreCase);
 
+        IEnumerable<FontFamily> added;
         if (isCollection)
         {
-            var fams = _collection.AddCollection(path).ToList();
-            if (fams.Count == 0)
+            added = _collection.AddCollection(path).ToList();
+            if (!added.Any())
                 throw new InvalidOperationException("Empty font collection: " + path);
-            if (asPrimary) _primaryFamily = fams[0];
-            else
-                foreach (var f in fams) _fallbackFamilies.Add(f);
         }
         else
         {
-            var fam = _collection.Add(path);
-            if (asPrimary) _primaryFamily = fam;
-            else _fallbackFamilies.Add(fam);
+            added = new[] { _collection.Add(path) };
         }
-    }
 
-    private Font GetPrimaryFont(float pxSize)
-    {
-        if (!_primaryFontCache.TryGetValue(pxSize, out var font))
+        foreach (var fam in added)
         {
-            font = _primaryFamily.CreateFont(pxSize, FontStyle.Regular);
-            _primaryFontCache[pxSize] = font;
-        }
-        return font;
-    }
-
-    public float GetScaleForPixelHeight(float pxSize)
-    {
-        // 与 CSS/GDI 一致：font-size 表示 em 高度（每 em 多少像素）。
-        if (!_primaryFamily.TryGetMetrics(FontStyle.Regular, out var metrics) || metrics is null)
-            return 1f;
-        return pxSize / metrics.UnitsPerEm;
-    }
-
-    public void GetVMetrics(float pxSize, out float ascent, out float descent, out float lineGap)
-    {
-        if (!_primaryFamily.TryGetMetrics(FontStyle.Regular, out var metrics) || metrics is null)
-        {
-            ascent = pxSize; descent = 0; lineGap = 0; return;
-        }
-        float scale = pxSize / metrics.UnitsPerEm;
-        ascent = metrics.HorizontalMetrics.Ascender * scale;
-        descent = metrics.HorizontalMetrics.Descender * scale;
-        lineGap = metrics.HorizontalMetrics.LineGap * scale;
-    }
-
-    /// <summary>
-    /// 测量整段文本的像素宽高，逻辑与 <see cref="WebGpuPainter"/> 的 DrawText 完全一致：
-    /// 用 painter 同款 ascender/descender/lineGap 推导行高；逐行累加 codepoint 的 Glyph.Advance。
-    /// 这样布局与绘制一定对齐，不会出现裁剪/错位。
-    /// </summary>
-    public (float Width, float Height) MeasureText(string? text, float pxSize)
-    {
-        GetVMetrics(pxSize, out float ascent, out float descent, out float lineGap);
-        float lineHeight = ascent - descent + lineGap;
-        if (string.IsNullOrEmpty(text))
-            return (0f, lineHeight);
-
-        float maxLineW = 0f;
-        float curLineW = 0f;
-        int lineCount = 1;
-        int i = 0;
-        while (i < text.Length)
-        {
-            int cp;
-            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            _familyByName[fam.Name] = fam;
+            if (asPrimary)
             {
-                cp = char.ConvertToUtf32(text[i], text[i + 1]);
-                i += 2;
+                _primaryFamily = fam;
+                asPrimary = false; // 集合里只把第一项作主字体
             }
             else
             {
-                cp = text[i];
-                i++;
+                _fallbackFamilies.Add(fam);
             }
-
-            if (cp == '\n')
-            {
-                if (curLineW > maxLineW) maxLineW = curLineW;
-                curLineW = 0f;
-                lineCount++;
-                continue;
-            }
-            if (cp == '\r') continue;
-
-            var g = GetGlyph(pxSize, cp);
-            curLineW += g.Advance;
         }
-        if (curLineW > maxLineW) maxLineW = curLineW;
-        return (maxLineW, lineHeight * lineCount);
     }
 
-    public Glyph GetGlyph(float pxSize, int codepoint)
+    private Font GetFont(string? fontFamily, float pxSize, string? fontWeight)
     {
-        var key = (pxSize, codepoint);
-        if (_cache.TryGetValue(key, out var g))
-            return g;
+        string family = !string.IsNullOrEmpty(fontFamily) && _familyByName.ContainsKey(fontFamily)
+            ? fontFamily
+            : _primaryFamily.Name;
+        var key = (family, pxSize, fontWeight);
+        if (_fontCache.TryGetValue(key, out var font)) return font;
+        var fam = _familyByName.TryGetValue(family, out var f) ? f : _primaryFamily;
+        var style = string.Equals(fontWeight, "bold", StringComparison.OrdinalIgnoreCase)
+            ? FontStyle.Bold
+            : FontStyle.Regular;
+        font = fam.CreateFont(pxSize, style);
+        _fontCache[key] = font;
+        return font;
+    }
 
-        string text = char.ConvertFromUtf32(codepoint);
-        var font = GetPrimaryFont(pxSize);
+    /// <summary>
+    /// 获取一条单行文本的 atlas region；多行调用方应先按 '\n' 拆开。与
+    /// <see cref="GdiTextAtlas.GetRun"/> 行为对齐：返回的 W/H 即可作为绘制矩形大小。
+    /// </summary>
+    public Run GetRun(string text, string? fontFamily, float fontSize, string? fontWeight)
+    {
+        string resolvedFamily = !string.IsNullOrEmpty(fontFamily) && _familyByName.ContainsKey(fontFamily)
+            ? fontFamily
+            : (_primaryFamily.Name ?? string.Empty);
+        var key = new RunKey(text, resolvedFamily, fontSize, fontWeight);
+        if (_cache.TryGetValue(key, out var cached)) return cached;
 
-        // 主字体 + 回退链：SixLabors 会自动为缺失字形使用 FallbackFontFamilies。
-        // VerticalAlignment 默认为 Top → 度量空间 y=0 对应行盒顶部，基线位于 ascent 处；
-        // 这与我们的 GetVMetrics 输出保持一致（painter 使用 baselineY = AbsoluteY + ascent）。
+        var font = GetFont(resolvedFamily, fontSize, fontWeight);
+
+        // 行盒高度：与 GDI 的 TEXTMETRIC.tmHeight 语义一致 —— ascent - descent + lineGap。
+        // descent 在 SixLabors 是负数（基线下方），故直接 (ascent - descent) 已包含下行。
+        float ascent = fontSize, descent = 0, lineGap = 0;
+        if (_primaryFamily.TryGetMetrics(FontStyle.Regular, out var pm) && pm is not null)
+        {
+            float scale = fontSize / pm.UnitsPerEm;
+            ascent = pm.HorizontalMetrics.Ascender * scale;
+            descent = pm.HorizontalMetrics.Descender * scale;
+            lineGap = pm.HorizontalMetrics.LineGap * scale;
+        }
+        int h = Math.Max(1, (int)Math.Ceiling(ascent - descent + lineGap));
+
+        // 宽度：用 SixLabors 整段 advance。包含 fallback 链与 kerning（与栅格化同条 TextOptions）。
         var measureOpts = new TextOptions(font)
         {
             FallbackFontFamilies = _fallbackFamilies,
-            Dpi = 72f, // 1pt = 1px，使 font.Size 直接表示像素 em 高度
+            Dpi = 72f,
         };
+        float advance = string.IsNullOrEmpty(text) ? 0f : TextMeasurer.MeasureAdvance(text, measureOpts).Width;
+        int w = Math.Max(1, (int)Math.Ceiling(advance));
 
-        var advance = TextMeasurer.MeasureAdvance(text, measureOpts).Width;
-        var bounds = TextMeasurer.MeasureBounds(text, measureOpts);
+        AllocShelf(w, h, out int gx, out int gy);
 
-        // 一些字符（空格、控制字符等）没有可见 ink → 直接缓存为空字形
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        if (!string.IsNullOrEmpty(text))
         {
-            g = new Glyph { Empty = true, Advance = advance };
-            _cache[key] = g;
-            return g;
-        }
-
-        // 紧凑包围盒像素尺寸（向外取整 1px 防止边缘被裁）
-        int boxLeft = (int)Math.Floor(bounds.X);
-        int boxTop = (int)Math.Floor(bounds.Y);
-        int boxRight = (int)Math.Ceiling(bounds.X + bounds.Width);
-        int boxBottom = (int)Math.Ceiling(bounds.Y + bounds.Height);
-        int w = boxRight - boxLeft;
-        int h = boxBottom - boxTop;
-        if (w <= 0 || h <= 0)
-        {
-            g = new Glyph { Empty = true, Advance = advance };
-            _cache[key] = g;
-            return g;
-        }
-
-        // Pack into shelf
-        if (_shelfX + w + Padding > _atlasW)
-        {
-            _shelfX = 0;
-            _shelfY += _shelfH + Padding;
-            _shelfH = 0;
-        }
-        if (_shelfY + h + Padding > _atlasH)
-        {
-            GrowAtlas(_atlasW * 2, _atlasH * 2);
-        }
-
-        int gx = _shelfX;
-        int gy = _shelfY;
-
-        // 渲染到 L8（单通道 8-bit luminance），可直接当作 alpha 拷贝到 R8 atlas。
-        using (var img = new Image<L8>(w, h))
-        {
+            // 渲染整条文本到 L8 —— 单通道 luminance 直接当作覆盖率拷贝到 R8 atlas。
+            using var img = new Image<L8>(w, h);
             var drawOpts = new RichTextOptions(font)
             {
                 FallbackFontFamilies = _fallbackFamilies,
                 Dpi = 72f,
-                // 让 ink 的左上角对齐到 image (0,0)
-                Origin = new Vector2(-boxLeft, -boxTop),
+                // 行盒顶部在 y=0，基线在 y=ascent —— 与 GDI DrawText(DT_LEFT|DT_TOP) 一致。
+                Origin = new Vector2(0, 0),
             };
-            img.Mutate(ctx => ctx.DrawText(drawOpts, text, Color.White));
+            img.Mutate(ctx => ctx.DrawText(drawOpts, text, SixLabors.ImageSharp.Color.White));
 
             img.ProcessPixelRows(accessor =>
             {
@@ -250,25 +265,18 @@ internal sealed unsafe class FontAtlas : IDisposable
                 {
                     var row = accessor.GetRowSpan(y);
                     int dstOffset = (gy + y) * _atlasW + gx;
-                    for (int x = 0; x < w; x++)
-                        _cpuAtlas[dstOffset + x] = row[x].PackedValue;
+                    int n = Math.Min(row.Length, w);
+                    for (int x = 0; x < n; x++)
+                        _cpuAtlas[dstOffset + x] = s_stemLut[row[x].PackedValue];
                 }
             });
         }
 
         UploadAtlasRegion(gx, gy, w, h);
-
         _shelfX += w + Padding;
         if (h > _shelfH) _shelfH = h;
 
-        // painter 使用：bitmap.top_left_screen = (penX + XOff, baselineY + YOff)
-        // baselineY = AbsoluteY + ascent，与 SixLabors 度量空间一致：行盒顶部在 y=0，基线在 y=ascent。
-        // 因此 bitmap 顶部在度量空间 = boxTop；相对基线 = boxTop - ascent。
-        float ascent = 0f;
-        if (_primaryFamily.TryGetMetrics(FontStyle.Regular, out var fm) && fm is not null)
-            ascent = fm.HorizontalMetrics.Ascender * (pxSize / fm.UnitsPerEm);
-
-        g = new Glyph
+        var run = new Run
         {
             U0 = gx / (float)_atlasW,
             V0 = gy / (float)_atlasH,
@@ -276,13 +284,24 @@ internal sealed unsafe class FontAtlas : IDisposable
             V1 = (gy + h) / (float)_atlasH,
             W = w,
             H = h,
-            XOff = boxLeft,
-            YOff = (int)Math.Round(boxTop - ascent),
-            Advance = advance,
-            Empty = false
         };
-        _cache[key] = g;
-        return g;
+        _cache[key] = run;
+        return run;
+    }
+
+    private void AllocShelf(int w, int h, out int gx, out int gy)
+    {
+        if (_shelfX + w + Padding > _atlasW)
+        {
+            _shelfX = 0;
+            _shelfY += _shelfH + Padding;
+            _shelfH = 0;
+        }
+        while (_shelfY + h + Padding > _atlasH)
+            GrowAtlas(_atlasW * 2, _atlasH * 2);
+
+        gx = _shelfX;
+        gy = _shelfY;
     }
 
     private void CreateAtlas(int width, int height)
@@ -322,13 +341,13 @@ internal sealed unsafe class FontAtlas : IDisposable
         UploadAtlasRegion(0, 0, oldW, oldH);
         float sx = (float)oldW / _atlasW;
         float sy = (float)oldH / _atlasH;
-        var keys = new List<(float, int)>(_cache.Keys);
+        var keys = new List<RunKey>(_cache.Keys);
         foreach (var k in keys)
         {
-            var g = _cache[k];
-            g.U0 *= sx; g.U1 *= sx;
-            g.V0 *= sy; g.V1 *= sy;
-            _cache[k] = g;
+            var r = _cache[k];
+            r.U0 *= sx; r.U1 *= sx;
+            r.V0 *= sy; r.V1 *= sy;
+            _cache[k] = r;
         }
     }
 
@@ -363,7 +382,8 @@ internal sealed unsafe class FontAtlas : IDisposable
         if (TextureView.IsNotNull) wgpuTextureViewRelease(TextureView);
         if (Texture.IsNotNull) { wgpuTextureDestroy(Texture); wgpuTextureRelease(Texture); }
         _fallbackFamilies.Clear();
-        _primaryFontCache.Clear();
+        _familyByName.Clear();
+        _fontCache.Clear();
         _cache.Clear();
     }
 }

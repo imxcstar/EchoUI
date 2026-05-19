@@ -12,7 +12,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 internal sealed class WebGpuPainter
 {
     private readonly UiBatchRenderer _batch;
-    private readonly GdiTextAtlas _textAtlas;
+    private readonly FontAtlas _textAtlas;
     private readonly TextureCache _textures;
     private readonly UiPipeline _pipeline;
 
@@ -34,7 +34,7 @@ internal sealed class WebGpuPainter
         }
     }
 
-    public WebGpuPainter(UiBatchRenderer batch, GdiTextAtlas textAtlas, TextureCache textures, UiPipeline pipeline)
+    public WebGpuPainter(UiBatchRenderer batch, FontAtlas textAtlas, TextureCache textures, UiPipeline pipeline)
     {
         _batch = batch;
         _textAtlas = textAtlas;

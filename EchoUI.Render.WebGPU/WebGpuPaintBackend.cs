@@ -13,7 +13,9 @@ internal sealed unsafe class WebGpuPaintBackend : IWin32PaintBackend
     private readonly WebGpuContext _context = new();
     private UiPipeline? _pipeline;
     private UiBatchRenderer? _batch;
-    private GdiTextAtlas? _textAtlas;
+    private FontAtlas? _textAtlas;
+    /// <summary>暴露给 WebGpuRenderer 接 TextMeasurementHook 用。</summary>
+    public FontAtlas? TextAtlas => _textAtlas;
     private TextureCache? _textures;
     private WebGpuPainter? _painter;
     private Win32Renderer? _renderer;
@@ -43,13 +45,33 @@ internal sealed unsafe class WebGpuPaintBackend : IWin32PaintBackend
         _pipeline.Initialize(_context.Device, _context.SwapChainFormat, wgsl);
 
         _textures = new TextureCache(_context.Device, _context.Queue);
-        _textAtlas = new GdiTextAtlas(_context.Device, _context.Queue);
+
+        // 默认字体：宋体（SimSun）—— 用户偏好；fallback 走 Microsoft YaHei 兜 emoji/中文符号。
+        _textAtlas = new FontAtlas(_context.Device, _context.Queue);
+        string fontsDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
+        string simsun = Path.Combine(fontsDir, "simsun.ttc");
+        if (File.Exists(simsun))
+            _textAtlas.LoadFont(simsun);
+        else
+            _textAtlas.LoadFont(Path.Combine(fontsDir, "msyh.ttc")); // 没有宋体时退到雅黑
+        TryAddFallback(_textAtlas, Path.Combine(fontsDir, "msyh.ttc"));
+        TryAddFallback(_textAtlas, Path.Combine(fontsDir, "seguiemj.ttf")); // Segoe UI Emoji
+        TryAddFallback(_textAtlas, Path.Combine(fontsDir, "seguisym.ttf"));
 
         _batch = new UiBatchRenderer(_context.Device, _context.Queue, _pipeline);
         _batch.SetWhiteTexture(_textures.WhiteTextureView);
 
         _painter = new WebGpuPainter(_batch, _textAtlas, _textures, _pipeline);
         _initialized = true;
+    }
+
+    private static void TryAddFallback(FontAtlas atlas, string path)
+    {
+        if (File.Exists(path))
+        {
+            try { atlas.AddFallback(path); } catch { /* ignore */ }
+        }
     }
 
     private static string LoadShader(string name)
