@@ -40,6 +40,7 @@ namespace EchoUI.Render.Win32
 
         // --- 自定义消息：用于调度更新 ---
         public const uint WM_ECHOUI_UPDATE = WM_APP + 1;
+        public const uint WM_ECHOUI_RENDER_READY = WM_APP + 3;
 
         // --- Edit 控件通知 ---
         public const int EN_SETFOCUS = 0x0100;
@@ -90,6 +91,8 @@ namespace EchoUI.Render.Win32
         public const uint COINIT_APARTMENTTHREADED = 0x2;
         public const int S_OK = 0;
         public const int S_FALSE = 1;
+        public const uint IMAGE_BITMAP = 0;
+        public const uint LR_CREATEDIBSECTION = 0x00002000;
 
         // --- TrackMouseEvent ---
         public const uint TME_LEAVE = 0x00000002;
@@ -397,6 +400,9 @@ namespace EchoUI.Render.Win32
 
         [DllImport("user32.dll")]
         public static extern int ReleaseDC(nint hWnd, nint hDC);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nint CopyImage(nint hImage, uint uType, int cxDesired, int cyDesired, uint fuFlags);
 
         [DllImport("user32.dll")]
         public static extern int FillRect(nint hDC, ref RECT lprc, nint hbr);

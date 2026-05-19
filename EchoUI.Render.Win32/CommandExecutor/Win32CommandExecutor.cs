@@ -25,6 +25,12 @@ internal static class Win32CommandExecutor
             ExecuteOne(hdc, cmd, element);
     }
 
+    public static void Execute(nint hdc, IReadOnlyList<RenderCommand> commands, Win32Element? element = null)
+    {
+        foreach (var cmd in commands)
+            ExecuteOne(hdc, cmd, element);
+    }
+
     private static void ExecuteOne(nint hdc, RenderCommand cmd, Win32Element? element)
     {
         switch (cmd)
@@ -74,6 +80,10 @@ internal static class Win32CommandExecutor
 
             case DrawTextLayout d:
                 DrawTextLayoutCommand(hdc, d.Layout, d.TextLayout, element?.TextColor);
+                break;
+
+            case Win32DrawImage d:
+                DrawImageCommand(hdc, d);
                 break;
 
             case PushClip c:
@@ -163,6 +173,41 @@ internal static class Win32CommandExecutor
                 var color = overrideColor ?? fragment.Style.Color;
                 GdiText.DrawText(hdc, fragment.Text, fragment.Style.FontFamily, fragment.Style.EffectiveFontSize, fragment.Style.FontWeight, color, rect, noWrap: true);
             }
+        }
+    }
+
+    private static void DrawImageCommand(nint hdc, Win32DrawImage command)
+    {
+        if (command.Bitmap == 0 || command.SourceWidth <= 0 || command.SourceHeight <= 0 || command.Layout.Width <= 0 || command.Layout.Height <= 0)
+            return;
+
+        GdiPlus.Flush();
+        var imageDc = NativeInterop.CreateCompatibleDC(hdc);
+        if (imageDc == 0)
+            return;
+
+        var oldBitmap = NativeInterop.SelectObject(imageDc, command.Bitmap);
+        try
+        {
+            NativeInterop.SetStretchBltMode(hdc, NativeInterop.HALFTONE);
+            NativeInterop.StretchBlt(
+                hdc,
+                (int)Math.Floor(command.Layout.X),
+                (int)Math.Floor(command.Layout.Y),
+                Math.Max(1, (int)Math.Ceiling(command.Layout.Width)),
+                Math.Max(1, (int)Math.Ceiling(command.Layout.Height)),
+                imageDc,
+                0,
+                0,
+                command.SourceWidth,
+                command.SourceHeight,
+                NativeInterop.SRCCOPY);
+        }
+        finally
+        {
+            if (oldBitmap != 0)
+                NativeInterop.SelectObject(imageDc, oldBitmap);
+            NativeInterop.DeleteDC(imageDc);
         }
     }
 

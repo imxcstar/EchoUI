@@ -191,6 +191,10 @@ namespace EchoUI.Render.Win32
                     OnEchoUIUpdate();
                     return 0;
 
+                case NativeInterop.WM_ECHOUI_RENDER_READY:
+                    OnEchoUIRenderReady(hWnd);
+                    return 0;
+
                 case Win32SynchronizationContext.WM_SYNC_CONTEXT:
                     Win32SynchronizationContext.ProcessQueue();
                     return 0;
@@ -340,32 +344,9 @@ namespace EchoUI.Render.Win32
 
                 if (w > 0 && h > 0 && _renderer?.RootElement != null)
                 {
-                    _renderer.EnsureLayout(w, h);
-
-                    var memoryDc = EnsureBackBuffer(ps.hdc, w, h, out var recreated);
-                    if (memoryDc != 0)
-                    {
-                        var dirtyRect = recreated
-                            ? new RectF(0, 0, w, h)
-                            : new RectF(ps.rcPaint.Left, ps.rcPaint.Top, Math.Max(0, ps.rcPaint.Width), Math.Max(0, ps.rcPaint.Height));
-
-                        CpuBitmapSurface? bitmapSurface = _backBufferBits != 0
-                            ? new CpuBitmapSurface(_backBufferBits, w, h, _backBufferStride)
-                            : null;
-                        GdiPainter.Paint(memoryDc, _renderer.RootElement, _renderer.RootInstance, _renderer.FloatingElements, w, h, dirtyRect, bitmapSurface);
-
-                        var nativeDirty = ToNativeRect(dirtyRect);
-                        NativeInterop.BitBlt(
-                            ps.hdc,
-                            nativeDirty.Left,
-                            nativeDirty.Top,
-                            Math.Max(0, nativeDirty.Width),
-                            Math.Max(0, nativeDirty.Height),
-                            memoryDc,
-                            nativeDirty.Left,
-                            nativeDirty.Top,
-                            NativeInterop.SRCCOPY);
-                    }
+                    var dirtyRect = new LayoutBox(ps.rcPaint.Left, ps.rcPaint.Top, Math.Max(0, ps.rcPaint.Width), Math.Max(0, ps.rcPaint.Height));
+                    _renderer.SubmitRenderFrame(w, h, [dirtyRect]);
+                    _renderer.PresentRenderFrame(ps.hdc, ps.rcPaint);
                 }
             }
             finally
@@ -555,6 +536,25 @@ namespace EchoUI.Render.Win32
                     task.ContinueWith(_ => _renderer.RequestRelayout(),
                         TaskScheduler.FromCurrentSynchronizationContext());
                 }
+            }
+        }
+
+        private void OnEchoUIRenderReady(nint hWnd)
+        {
+            if (_renderer == null)
+                return;
+
+            var hdc = NativeInterop.GetDC(hWnd);
+            if (hdc == 0)
+                return;
+
+            try
+            {
+                _renderer.PresentRenderFrame(hdc);
+            }
+            finally
+            {
+                NativeInterop.ReleaseDC(hWnd, hdc);
             }
         }
     }

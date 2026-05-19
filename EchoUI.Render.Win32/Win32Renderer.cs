@@ -24,6 +24,7 @@ namespace EchoUI.Render.Win32
         private readonly Win32ImageService _imageService;
         private readonly Win32InputMethodService _inputMethodService;
         private readonly Win32NativeInputService _nativeInputService;
+        private readonly Win32CpuRenderBackend _renderBackend;
         private bool _disposed;
         private bool _layoutValid;
         private float _layoutViewportWidth;
@@ -34,9 +35,11 @@ namespace EchoUI.Render.Win32
         private readonly Stopwatch _wheelSmoothingStopwatch = Stopwatch.StartNew();
         private float _smoothedWheelPixels;
         private long _lastWheelSmoothingTimestamp;
+        private long _renderFrameVersion;
 
         private const double WheelSmoothingResetMs = 140.0;
         private const float WheelSmoothingAlpha = 0.55f;
+        private const int RenderTileSize = TileGrid.DefaultTileSize;
 
         internal Win32Element? RootElement => _rootElement;
         internal ComponentInstance? RootInstance => _rootInstance;
@@ -56,6 +59,7 @@ namespace EchoUI.Render.Win32
             _imageService = new Win32ImageService();
             _inputMethodService = new Win32InputMethodService(() => _window.Hwnd);
             _nativeInputService = new Win32NativeInputService(() => _window.Hwnd, RequestRepaint);
+            _renderBackend = new Win32CpuRenderBackend(() => _window.Hwnd);
             _hitTestManager = new HitTestManager<Win32Element>(new HitTestPlatform<Win32Element>
             {
                 GetFloatingElements = () => _floatingElements,
@@ -509,6 +513,7 @@ namespace EchoUI.Render.Win32
 
             _rootInstance = null;
             _floatingElements.Clear();
+            _renderBackend.Dispose();
         }
 
         // --- 布局与重绘 ---
@@ -618,6 +623,21 @@ namespace EchoUI.Render.Win32
             _layoutViewportWidth = vpW;
             _layoutViewportHeight = vpH;
             _layoutValid = true;
+        }
+
+        internal void SubmitRenderFrame(int width, int height, IReadOnlyList<LayoutBox> dirtyRects)
+        {
+            if (_rootElement == null || width <= 0 || height <= 0)
+                return;
+
+            EnsureLayout(width, height);
+            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, dirtyRects, Interlocked.Increment(ref _renderFrameVersion), RenderTileSize);
+            _renderBackend.Submit(frame);
+        }
+
+        internal bool PresentRenderFrame(nint hdc, NativeInterop.RECT? clipRect = null)
+        {
+            return _renderBackend.Present(hdc, clipRect);
         }
 
         private void SyncInstanceLayouts()

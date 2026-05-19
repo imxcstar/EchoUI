@@ -93,6 +93,66 @@ namespace EchoUI.Render.Win32
             }
         }
 
+        public static void PaintFrame(nint hdc, RenderFrame frame, CpuBitmapSurface? bitmapSurface = null)
+        {
+            using var gdiPlusScope = GdiPlus.BeginDraw(hdc);
+            var previousSurface = s_bitmapSurface;
+            var previousClipRect = s_effectiveClipRect;
+
+            try
+            {
+                s_bitmapSurface = bitmapSurface.HasValue && bitmapSurface.Value.IsValid ? bitmapSurface : null;
+
+                if (frame.DirtyTiles.Count > 0)
+                {
+                    foreach (var tile in frame.DirtyTiles)
+                    {
+                        PaintFrameRegion(hdc, frame, tile.Bounds);
+                    }
+                }
+                else
+                {
+                    foreach (var dirty in frame.DirtyRects)
+                    {
+                        PaintFrameRegion(hdc, frame, dirty);
+                    }
+                }
+            }
+            finally
+            {
+                s_bitmapSurface = previousSurface;
+                s_effectiveClipRect = previousClipRect;
+            }
+        }
+
+        private static void PaintFrameRegion(nint hdc, RenderFrame frame, LayoutBox region)
+        {
+            if (region.Width <= 0 || region.Height <= 0)
+                return;
+
+            var clipRect = new RectF(region.X, region.Y, region.Width, region.Height);
+            var savedState = NativeInterop.SaveDC(hdc);
+            var gdiPlusState = GdiPlus.SaveGraphics();
+            var previousClipRect = s_effectiveClipRect;
+
+            try
+            {
+                s_effectiveClipRect = clipRect;
+                var clip = ToRect(clipRect);
+                NativeInterop.IntersectClipRect(hdc, clip.Left, clip.Top, clip.Right, clip.Bottom);
+                GdiPlus.IntersectClip(clipRect);
+                FillSolidRect(hdc, clipRect, Core.Color.White);
+                Win32CommandExecutor.Execute(hdc, frame.Commands);
+            }
+            finally
+            {
+                s_effectiveClipRect = previousClipRect;
+                GdiPlus.RestoreGraphics(gdiPlusState);
+                if (savedState != 0)
+                    NativeInterop.RestoreDC(hdc, savedState);
+            }
+        }
+
         public static void ReleaseCachedResources(Win32Element element)
         {
             GdiPlus.ReleaseElementPaths(element);
