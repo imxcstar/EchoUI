@@ -11,23 +11,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EchoUI.Core\EchoUI.Core.csproj" />
-    <ProjectReference Include="..\EchoUI.Render.Win32\EchoUI.Render.Win32.csproj" />
-    <ProjectReference Include="..\libs\Alimer.Bindings\src\Alimer.Bindings.WebGPU\Alimer.Bindings.WebGPU.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Alimer.Bindings.WebGPU" Version="1.6.0" />
+    <PackageReference Include="Alimer.WebGPU.Native" Version="1.0.4" />
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="Shaders\*.wgsl" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <!-- 直接从 libs 复制 wgpu_native.dll 到输出目录 -->
-  <ItemGroup Condition="$([MSBuild]::IsOsPlatform('windows'))">
-    <None Include="..\libs\Alimer.Bindings\src\Alimer.WebGPU.Native\runtimes\win-x64\native\wgpu_native.dll" Condition="'$(PlatformTarget)' == '' or '$(PlatformTarget)' == 'AnyCPU' or '$(PlatformTarget)' == 'x64'" Link="wgpu_native.dll" Visible="False" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\libs\Alimer.Bindings\src\Alimer.WebGPU.Native\runtimes\win-arm64\native\wgpu_native.dll" Condition="'$(PlatformTarget)' == 'ARM64'" Link="wgpu_native.dll" Visible="False" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

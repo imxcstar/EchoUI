@@ -11,7 +11,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// 一帧内累积顶点/索引并按 (texture, scissor) 分批 flush 的批渲染器。
 /// 顶点和索引使用 CPU 端 List 累积，flush 时一次 wgpuQueueWriteBuffer + drawIndexed。
 /// </summary>
-internal sealed unsafe class UiBatchRenderer : IDisposable
+public sealed unsafe class UiBatchRenderer : IDisposable
 {
     private readonly WGPUDevice _device;
     private readonly WGPUQueue _queue;

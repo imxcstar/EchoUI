@@ -1,9 +1,8 @@
 using System.Runtime.InteropServices;
-using EchoUI.Render.Win32;
 using WebGPU;
 using static WebGPU.WebGPU;
 
-namespace EchoUI.Render.WebGPU.Internal;
+namespace EchoUI.Render.Win32.WebGpu;
 
 /// <summary>
 /// 使用 GDI（CLEARTYPE_QUALITY + TrueType hinting + Windows 字体链接）栅格化文本到一张

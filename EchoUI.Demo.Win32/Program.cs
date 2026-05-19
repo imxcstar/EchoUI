@@ -3,7 +3,7 @@ using System.Threading;
 using EchoUI.Core;
 using EchoUI.Demo;
 using EchoUI.Render.Win32;
-using EchoUI.Render.WebGPU;
+using EchoUI.Render.Win32.WebGpu;
 
 // Win32 消息循环需要 SynchronizationContext 来正确处理 async/await
 var syncCtx = new Win32SynchronizationContext();

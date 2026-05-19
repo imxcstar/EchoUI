@@ -1,9 +1,9 @@
 using System.Numerics;
 using EchoUI.Core;
-using EchoUI.Render.Win32;
+using EchoUI.Render.WebGPU.Internal;
 using WebGPU;
 
-namespace EchoUI.Render.WebGPU.Internal;
+namespace EchoUI.Render.Win32.WebGpu;
 
 /// <summary>
 /// 遍历 Win32Element 树并向 UiBatchRenderer 提交 draw 命令。

@@ -1,6 +1,5 @@
 using SixLabors.Fonts;
 using EchoUI.Core;
-using EchoUI.Render.Win32;
 
 namespace EchoUI.Render.WebGPU.Internal;
 
@@ -9,7 +8,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// 共享同一组字体文件，逐码点累加 advance 并使用 painter 同款行高，保证布局与绘制完全对齐。
 /// 不依赖 GPU 设备，可在首帧绘制前就创建并被布局调用。
 /// </summary>
-internal sealed class SixLaborsTextMeasurer
+public sealed class SixLaborsTextMeasurer
 {
     private readonly FontCollection _collection = new();
     private FontFamily _primary;

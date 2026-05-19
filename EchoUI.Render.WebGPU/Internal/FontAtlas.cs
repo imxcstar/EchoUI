@@ -18,7 +18,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// painter 调用方式不变。Windows 桌面仍建议走 GdiTextAtlas —— SixLabors.Fonts 没有
 /// TrueType hinting bytecode 解释器，12–14px 小字号竖笔会发灰。
 /// </summary>
-internal sealed unsafe class FontAtlas : IDisposable
+public sealed unsafe class FontAtlas : IDisposable
 {
     private const int InitialAtlasSize = 1024;
     private const int Padding = 1;

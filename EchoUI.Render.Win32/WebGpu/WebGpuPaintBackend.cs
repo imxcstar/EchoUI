@@ -1,9 +1,8 @@
-using EchoUI.Render.Win32;
 using EchoUI.Render.WebGPU.Internal;
 using WebGPU;
 using static WebGPU.WebGPU;
 
-namespace EchoUI.Render.WebGPU;
+namespace EchoUI.Render.Win32.WebGpu;
 
 /// <summary>
 /// IWin32PaintBackend 的 WebGPU 实现：在 Win32Window 的 WM_PAINT 中接管绘制。

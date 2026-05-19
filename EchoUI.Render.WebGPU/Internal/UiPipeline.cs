@@ -7,7 +7,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// <summary>
 /// 创建并持有 UI Uber Render Pipeline、Uniform buffer、Sampler、Bind group layouts。
 /// </summary>
-internal sealed unsafe class UiPipeline : IDisposable
+public sealed unsafe class UiPipeline : IDisposable
 {
     public WGPURenderPipeline Pipeline;
     public WGPUPipelineLayout PipelineLayout;

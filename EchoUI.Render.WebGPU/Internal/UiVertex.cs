@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace EchoUI.Render.WebGPU.Internal;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-internal struct UiVertex
+public struct UiVertex
 {
     public float PositionX;
     public float PositionY;

@@ -8,7 +8,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// <summary>
 /// 图片纹理缓存：从文件路径加载 RGBA8 并上传为 sampled texture，缓存到内存中。
 /// </summary>
-internal sealed unsafe class TextureCache : IDisposable
+public sealed unsafe class TextureCache : IDisposable
 {
     private readonly WGPUDevice _device;
     private readonly WGPUQueue _queue;

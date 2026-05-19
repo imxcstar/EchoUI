@@ -1,8 +1,7 @@
 using EchoUI.Core;
-using EchoUI.Render.Win32;
 using EchoUI.Render.WebGPU.Internal;
 
-namespace EchoUI.Render.WebGPU;
+namespace EchoUI.Render.Win32.WebGpu;
 
 /// <summary>
 /// WebGPU 渲染入口：创建配置成 WebGPU 后端的 <see cref="Win32Renderer"/>。

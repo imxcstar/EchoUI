@@ -10,7 +10,7 @@ namespace EchoUI.Render.WebGPU.Internal;
 /// 封装 WebGPU 设备/Surface 的创建、Resize 与 RenderFrame。
 /// 仅支持 Win32 (HWND) 表面，跨平台留待后续扩展。
 /// </summary>
-internal sealed unsafe class WebGpuContext : IDisposable
+public sealed unsafe class WebGpuContext : IDisposable
 {
     public WGPUInstance Instance;
     public WGPUAdapter Adapter;
