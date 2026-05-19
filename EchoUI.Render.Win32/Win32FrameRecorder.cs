@@ -8,24 +8,26 @@ internal static class Win32FrameRecorder
     {
         var viewport = new LayoutBox(0, 0, width, height);
         var effectiveDirtyRects = dirtyRects.Count == 0 ? [viewport] : dirtyRects.Select(r => TileGrid.Intersect(viewport, r)).Where(r => r.Width > 0 && r.Height > 0).ToArray();
-        var dirtyUnion = effectiveDirtyRects.Aggregate(LayoutBox.Zero, TileGrid.Union);
+        var tiles = TileGrid.FromDirtyRects(width, height, effectiveDirtyRects, tileSize);
+        var paintCoverage = tiles.Count > 0
+            ? tiles.Select(t => t.Bounds).Aggregate(LayoutBox.Zero, TileGrid.Union)
+            : effectiveDirtyRects.Aggregate(LayoutBox.Zero, TileGrid.Union);
         var commands = new List<RenderCommand>(512)
         {
             new DrawRect(viewport, Color.White, 0)
         };
 
         if (rootInstance != null)
-            AddNativeBackedInstanceCommands(rootInstance, commands, dirtyUnion);
+            AddNativeBackedInstanceCommands(rootInstance, commands, paintCoverage);
         else if (root != null)
-            AddElementCommands(root, commands, dirtyUnion, null);
+            AddElementCommands(root, commands, paintCoverage, null);
 
         if (root != null)
-            AddOverlayCommands(root, commands, dirtyUnion, floatingElements);
+            AddOverlayCommands(root, commands, paintCoverage, floatingElements);
 
         foreach (var floating in floatingElements)
-            AddFloatCommands(floating, commands, dirtyUnion);
+            AddFloatCommands(floating, commands, paintCoverage);
 
-        var tiles = TileGrid.FromDirtyRects(width, height, effectiveDirtyRects, tileSize);
         return new RenderFrame(width, height, commands, effectiveDirtyRects, tiles, tileSize, version);
     }
 

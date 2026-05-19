@@ -346,7 +346,6 @@ namespace EchoUI.Render.Win32
                 {
                     var dirtyRect = new LayoutBox(ps.rcPaint.Left, ps.rcPaint.Top, Math.Max(0, ps.rcPaint.Width), Math.Max(0, ps.rcPaint.Height));
                     _renderer.SubmitRenderFrame(w, h, [dirtyRect]);
-                    _renderer.PresentRenderFrame(ps.hdc, ps.rcPaint);
                 }
             }
             finally

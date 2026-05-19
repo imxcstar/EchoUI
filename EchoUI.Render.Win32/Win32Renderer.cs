@@ -36,6 +36,8 @@ namespace EchoUI.Render.Win32
         private float _smoothedWheelPixels;
         private long _lastWheelSmoothingTimestamp;
         private long _renderFrameVersion;
+        private bool _forceFullFrameRender;
+        private bool _pendingNativeInputPositionSync;
 
         private const double WheelSmoothingResetMs = 140.0;
         private const float WheelSmoothingAlpha = 0.55f;
@@ -525,6 +527,7 @@ namespace EchoUI.Render.Win32
         {
             if (_rootElement == null || _window.Hwnd == 0) return;
 
+            _forceFullFrameRender = true;
             _layoutValid = false;
             NativeInterop.GetClientRect(_window.Hwnd, out var rect);
             EnsureLayout(rect.Width, rect.Height);
@@ -594,7 +597,7 @@ namespace EchoUI.Render.Win32
             if (syncManagedLayout)
                 SyncInstanceLayouts();
             if (syncNativeInputs)
-                _nativeInputService.UpdatePositions(scrollTarget, vpW, vpH);
+                _pendingNativeInputPositionSync = true;
             RequestRepaint(scrollTarget);
         }
 
@@ -631,12 +634,24 @@ namespace EchoUI.Render.Win32
                 return;
 
             EnsureLayout(width, height);
-            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, dirtyRects, Interlocked.Increment(ref _renderFrameVersion), RenderTileSize);
+            var viewport = new LayoutBox(0, 0, width, height);
+            var needsFullFrame = _forceFullFrameRender;
+            var frameDirtyRects = needsFullFrame ? [viewport] : dirtyRects;
+            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, frameDirtyRects, Interlocked.Increment(ref _renderFrameVersion), RenderTileSize);
+            if (needsFullFrame)
+                _forceFullFrameRender = false;
             _renderBackend.Submit(frame);
         }
 
         internal bool PresentRenderFrame(nint hdc, NativeInterop.RECT? clipRect = null)
         {
+            if (_pendingNativeInputPositionSync)
+            {
+                _pendingNativeInputPositionSync = false;
+                if (_rootElement != null && _layoutViewportWidth > 0 && _layoutViewportHeight > 0)
+                    _nativeInputService.UpdatePositions(_rootElement, _layoutViewportWidth, _layoutViewportHeight);
+            }
+
             return _renderBackend.Present(hdc, clipRect);
         }
 
@@ -766,8 +781,19 @@ namespace EchoUI.Render.Win32
         /// </summary>
         internal void RequestRepaint()
         {
-            if (_window.Hwnd != 0)
-                NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
+            if (_window.Hwnd == 0)
+                return;
+
+            _forceFullFrameRender = true;
+            NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
+        }
+
+        internal void RequestAnimationRepaint()
+        {
+            if (_window.Hwnd == 0)
+                return;
+
+            NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
         }
 
         internal void RequestRepaint(Win32Element? element)
@@ -777,6 +803,7 @@ namespace EchoUI.Render.Win32
 
             if (element == null || element.LayoutWidth <= 0 || element.LayoutHeight <= 0)
             {
+                _forceFullFrameRender = true;
                 NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
                 return;
             }
@@ -791,6 +818,7 @@ namespace EchoUI.Render.Win32
 
             if (first == null && second == null)
             {
+                _forceFullFrameRender = true;
                 NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
                 return;
             }

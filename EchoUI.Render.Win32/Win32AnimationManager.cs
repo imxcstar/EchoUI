@@ -12,8 +12,8 @@ internal sealed class Win32AnimationManager
     private readonly Win32Renderer _renderer;
     private readonly AnimationEngine<Win32Element> _engine;
     private readonly Dictionary<Win32Element, ScrollAnimationState> _scrollAnimations = [];
-    private const uint TimerIntervalMs = 2;
-    private const double ScrollSmoothTimeMs = 130.0;
+    private const uint TimerIntervalMs = 16;
+    private const double ScrollSmoothTimeMs = 100.0;
     private const float ScrollSnapThreshold = 0.25f;
     private const float ScrollVelocitySnapThreshold = 0.02f;
 
@@ -121,7 +121,7 @@ internal sealed class Win32AnimationManager
         }
         else if (result.NeedsFullRepaint)
         {
-            _renderer.RequestRepaint();
+            _renderer.RequestAnimationRepaint();
         }
         else
         {

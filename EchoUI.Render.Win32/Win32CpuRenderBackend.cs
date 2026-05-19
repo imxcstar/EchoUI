@@ -12,9 +12,21 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
     private CpuRenderBuffer? _frontBuffer;
     private CpuRenderBuffer? _spareBuffer;
     private LayoutBox _completedDirtyBounds;
+    private long _completedVersion;
     private bool _disposed;
 
     public RenderBackendKind Kind => RenderBackendKind.Cpu;
+
+    public long CompletedVersion
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _completedVersion;
+            }
+        }
+    }
 
     public Win32CpuRenderBackend(Func<nint> getHwnd)
     {
@@ -35,9 +47,16 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
             if (_disposed)
                 return;
 
-            dropped = _pendingFrame;
-            _pendingFrame = frame;
-            Monitor.Pulse(_gate);
+            if (_pendingFrame != null && IsFullFrame(_pendingFrame) && !IsFullFrame(frame))
+            {
+                dropped = frame;
+            }
+            else
+            {
+                dropped = _pendingFrame;
+                _pendingFrame = frame;
+                Monitor.Pulse(_gate);
+            }
         }
 
         DisposeFrameResources(dropped);
@@ -116,6 +135,7 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
             try
             {
                 var buffer = RentRenderBuffer(frame.Width, frame.Height);
+                CopyFrontBuffer(buffer);
                 GdiPainter.PaintFrame(buffer.Hdc, frame, buffer.Surface);
 
                 lock (_gate)
@@ -130,6 +150,7 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
                     _frontBuffer = buffer;
                     _spareBuffer = oldFront;
                     _completedDirtyBounds = frame.DirtyRects.Aggregate(LayoutBox.Zero, TileGrid.Union);
+                    _completedVersion = frame.Version;
                 }
 
                 var hwnd = _getHwnd();
@@ -164,6 +185,17 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
         return CpuRenderBuffer.Create(width, height);
     }
 
+    private void CopyFrontBuffer(CpuRenderBuffer target)
+    {
+        lock (_gate)
+        {
+            if (_frontBuffer == null || _frontBuffer.Width != target.Width || _frontBuffer.Height != target.Height)
+                return;
+
+            NativeInterop.BitBlt(target.Hdc, 0, 0, target.Width, target.Height, _frontBuffer.Hdc, 0, 0, NativeInterop.SRCCOPY);
+        }
+    }
+
     private static void DisposeFrameResources(RenderFrame? frame)
     {
         if (frame == null)
@@ -174,6 +206,18 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
             if (command is IDisposable disposable)
                 disposable.Dispose();
         }
+    }
+
+    private static bool IsFullFrame(RenderFrame frame)
+    {
+        if (frame.DirtyRects.Count != 1)
+            return false;
+
+        var dirty = frame.DirtyRects[0];
+        return dirty.X <= 0
+            && dirty.Y <= 0
+            && dirty.Width >= frame.Width
+            && dirty.Height >= frame.Height;
     }
 
     private static NativeInterop.RECT ToNativeRect(LayoutBox rect)
