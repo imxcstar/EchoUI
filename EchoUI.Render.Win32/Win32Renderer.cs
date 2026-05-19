@@ -49,6 +49,13 @@ namespace EchoUI.Render.Win32
         /// </summary>
         public bool SmoothScrollEnabled { get; set; }
 
+        /// <summary>
+        /// 是否在 Input 元素上创建原生 Win32 EDIT 控件。
+        /// WebGPU 等自绘后端应设为 false，转而由 TextInput 组件全自绘处理输入。
+        /// 必须在挂载组件之前设置。
+        /// </summary>
+        public bool UseNativeInput { get; init; } = true;
+
         public Win32Renderer(Win32Window window)
         {
             _window = window;
@@ -137,7 +144,10 @@ namespace EchoUI.Render.Win32
             {
                 element.Width = Dimension.Percent(100);
                 element.Height = Dimension.Percent(100);
-                _nativeInputService.Create(element);
+                if (UseNativeInput)
+                {
+                    _nativeInputService.Create(element);
+                }
             }
             else if (type != ElementCoreName.Container && type != ElementCoreName.Text && type != "img")
             {
@@ -206,7 +216,7 @@ namespace EchoUI.Render.Win32
             }
 
             // 同步 Input 的原生 Edit 控件
-            if (element.ElementType == ElementCoreName.Input && element.EditHwnd != 0)
+            if (UseNativeInput && element.ElementType == ElementCoreName.Input && element.EditHwnd != 0)
             {
                 _nativeInputService.Sync(element);
             }
@@ -342,11 +352,15 @@ namespace EchoUI.Render.Win32
                 {
                     if (propValue is string src)
                     {
-                        _imageService.Load(element, src);
+                        element.ImageSrc = src;
+                        if (UseNativeInput)
+                            _imageService.Load(element, src);
                     }
-                    else if (propValue == null && element.NativeImageHandle != 0)
+                    else if (propValue == null)
                     {
-                        _imageService.Clear(element);
+                        element.ImageSrc = null;
+                        if (element.NativeImageHandle != 0)
+                            _imageService.Clear(element);
                     }
                     return;
                 }

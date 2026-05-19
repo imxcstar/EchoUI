@@ -10,6 +10,7 @@
     <Project Path="EchoUI.Generator/EchoUI.Generator.csproj" />
     <Project Path="EchoUI.Render.Web/EchoUI.Render.Web.csproj" />
     <Project Path="EchoUI.Render.Win32/EchoUI.Render.Win32.csproj" />
+    <Project Path="EchoUI.Render.WebGPU/EchoUI.Render.WebGPU.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="EchoUI.Tools.Serial/EchoUI.Tools.Serial.csproj" />

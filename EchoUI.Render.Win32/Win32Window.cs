@@ -27,6 +27,13 @@ namespace EchoUI.Render.Win32
 
         public nint Hwnd => _hwnd;
 
+        /// <summary>
+        /// 可选的绘制后端。若未设置则使用默认 GDI+ 双缓冲绘制；
+        /// 设置后由后端接管 WM_PAINT/WM_SIZE 的图形部分（如 WebGPU）。
+        /// 必须在 <see cref="Win32Renderer"/> 创建之后、首次绘制之前注入。
+        /// </summary>
+        public IWin32PaintBackend? PaintBackend { get; set; }
+
         public Win32Window(string title, int width, int height)
         {
             _title = title;
@@ -37,6 +44,22 @@ namespace EchoUI.Render.Win32
         internal void SetRenderer(Win32Renderer renderer)
         {
             _renderer = renderer;
+        }
+
+        /// <summary>
+        /// 由后端 Attach 之后调用一次，触发首帧 resize / paint。
+        /// </summary>
+        public void NotifyPaintBackendReady()
+        {
+            if (_hwnd == 0 || PaintBackend == null) return;
+            NativeInterop.GetClientRect(_hwnd, out var rect);
+            int w = rect.Width;
+            int h = rect.Height;
+            if (w > 0 && h > 0)
+            {
+                PaintBackend.Resize(w, h);
+            }
+            NativeInterop.InvalidateRect(_hwnd, 0, false);
         }
 
         /// <summary>
@@ -197,6 +220,8 @@ namespace EchoUI.Render.Win32
 
                 case NativeInterop.WM_DESTROY:
                     DisposeBackBuffer();
+                    try { PaintBackend?.Dispose(); } catch { /* ignore */ }
+                    PaintBackend = null;
                     _renderer?.Dispose();
                     _renderer = null;
                     NativeInterop.PostQuitMessage(0);
@@ -338,6 +363,16 @@ namespace EchoUI.Render.Win32
                 int w = clientRect.Width;
                 int h = clientRect.Height;
 
+                // 自定义绘制后端（如 WebGPU）接管全部图形输出
+                if (PaintBackend != null)
+                {
+                    if (w > 0 && h > 0 && _renderer?.RootElement != null)
+                    {
+                        PaintBackend.Paint(w, h);
+                    }
+                    return;
+                }
+
                 if (w > 0 && h > 0 && _renderer?.RootElement != null)
                 {
                     _renderer.EnsureLayout(w, h);
@@ -458,6 +493,14 @@ namespace EchoUI.Render.Win32
         private void OnResize(nint hWnd)
         {
             DisposeBackBuffer();
+            if (PaintBackend != null)
+            {
+                NativeInterop.GetClientRect(hWnd, out var rect);
+                if (rect.Width > 0 && rect.Height > 0)
+                {
+                    PaintBackend.Resize(rect.Width, rect.Height);
+                }
+            }
             _renderer?.RequestRelayout();
         }
 

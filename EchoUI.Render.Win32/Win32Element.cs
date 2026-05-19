@@ -40,6 +40,9 @@ namespace EchoUI.Render.Win32
         public int NativeImageWidth { get; set; }
         public int NativeImageHeight { get; set; }
 
+        /// <summary>当前 img 元素的 src 路径（保留原始字符串，供非 GDI 后端使用）。</summary>
+        public string? ImageSrc { get; set; }
+
         // --- GDI/GDI+ 路径缓存 ---
         public nint RoundedFillPath { get; set; }
         public RectF RoundedFillPathBounds { get; set; }

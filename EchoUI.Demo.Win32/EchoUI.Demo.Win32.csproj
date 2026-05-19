@@ -23,5 +23,6 @@
 	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Demo\EchoUI.Demo.csproj" />
 		<ProjectReference Include="..\EchoUI.Render.Win32\EchoUI.Render.Win32.csproj" />
+		<ProjectReference Include="..\EchoUI.Render.WebGPU\EchoUI.Render.WebGPU.csproj" />
 	</ItemGroup>
 </Project>

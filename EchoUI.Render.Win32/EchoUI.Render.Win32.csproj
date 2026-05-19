@@ -8,5 +8,6 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\EchoUI.Core\EchoUI.Core.csproj" />
+		<InternalsVisibleTo Include="EchoUI.Render.WebGPU" />
 	</ItemGroup>
 </Project>

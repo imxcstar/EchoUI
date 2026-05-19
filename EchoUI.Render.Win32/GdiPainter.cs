@@ -1397,6 +1397,23 @@ namespace EchoUI.Render.Win32
                     return cached;
             }
 
+            // 外部测量覆盖（WebGPU/SixLabors 等）。允许后端替换 GDI 度量以匹配自身字形渲染。
+            var overrideFn = TextMeasurementHook.Override;
+            if (overrideFn is not null)
+            {
+                var overridden = overrideFn(text, resolvedFamily, fontSize, fontWeight, widthConstraint, noWrap);
+                if (overridden.HasValue)
+                {
+                    lock (CacheLock)
+                    {
+                        if (MeasureCache.Count >= MaxMeasureCacheEntries)
+                            MeasureCache.Clear();
+                        MeasureCache[key] = overridden.Value;
+                    }
+                    return overridden.Value;
+                }
+            }
+
             if (text.Length == 0)
             {
                 var emptyResult = new TextMeasurementResult(0, GetOrCreateLineHeight(resolvedFamily, fontSize, fontWeight, fontKey));
