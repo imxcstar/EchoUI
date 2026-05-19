@@ -44,33 +44,9 @@ internal sealed unsafe class GdiTextAtlas : IDisposable
 
     private readonly Dictionary<RunKey, Run> _cache = new();
 
-    // 专为 atlas 栅格化使用的 grayscale-AA HFONT 缓存（与 GdiText.GetFontHandle 的
-    // CLEARTYPE_QUALITY HFONT 区分开）。ClearType 把覆盖度沿水平方向拆成 R/G/B 三个子像素，
-    // 直接降为灰度（max 或 avg）会出现硬边/相位锯齿；用 ANTIALIASED_QUALITY 让 GDI 输出
-    // R=G=B 的真正灰度 AA，读 R 通道即得到平滑的覆盖度。
-    private readonly Dictionary<(string Family, float Size, string? Weight), nint> _aaFonts = new();
-    private const uint ANTIALIASED_QUALITY = 4;
-
-    private nint GetAaFont(string family, float fontSize, string? fontWeight)
-    {
-        var key = (family, fontSize, fontWeight);
-        if (_aaFonts.TryGetValue(key, out var h)) return h;
-        int weight = NativeInterop.FW_NORMAL;
-        if (!string.IsNullOrEmpty(fontWeight) &&
-            string.Equals(fontWeight, "bold", StringComparison.OrdinalIgnoreCase))
-            weight = NativeInterop.FW_BOLD;
-        int heightLogical = -Math.Max(1, (int)Math.Round(fontSize > 0 ? fontSize : 14f));
-        h = NativeInterop.CreateFont(
-            heightLogical, 0, 0, 0, weight, 0, 0, 0,
-            NativeInterop.DEFAULT_CHARSET,
-            NativeInterop.OUT_DEFAULT_PRECIS,
-            NativeInterop.CLIP_DEFAULT_PRECIS,
-            ANTIALIASED_QUALITY,
-            NativeInterop.DEFAULT_PITCH | NativeInterop.FF_DONTCARE,
-            family);
-        _aaFonts[key] = h;
-        return h;
-    }
+    // 与 GdiText.GetFontHandle 的 CLEARTYPE_QUALITY HFONT 完全一致。栅格化时三个子像素通道
+     // (R/G/B) 取平均 → 256 级灰度 AA，匹配 Win32 GDI 直接画到屏 DC 时的视觉清晰度。
+     // 早期试过 ANTIALIASED_QUALITY（只有 17 级 AA），小字号边缘会出现阶梯感 → 退回 ClearType+avg。
 
     private readonly struct RunKey : IEquatable<RunKey>
     {
@@ -108,9 +84,8 @@ internal sealed unsafe class GdiTextAtlas : IDisposable
 
         nint screenDC = NativeInterop.GetDC(0);
         nint memDC = NativeInterop.CreateCompatibleDC(screenDC);
-        // 使用 grayscale-AA HFONT（face/size/weight 与 GdiPainter 完全一致 —— hinting 仍生效，
-        // 测量结果与 ClearType HFONT 在同一字体/字号下相同）。
-        nint hFont = GetAaFont(resolved, fontSize, fontWeight);
+        // 使用 ClearType HFONT（与 GdiPainter 完全一致 —— 同样 hinting / 同样 advance）。
+        nint hFont = GdiText.GetFontHandle(resolved, fontSize, fontWeight);
         nint oldFont = hFont != 0 ? NativeInterop.SelectObject(memDC, hFont) : 0;
 
         nint dibBmp = 0;
@@ -145,7 +120,9 @@ internal sealed unsafe class GdiTextAtlas : IDisposable
                 throw new InvalidOperationException("CreateDIBSection failed");
             oldBmp = NativeInterop.SelectObject(memDC, dibBmp);
 
-            // 黑底白字 → 像素的 RGB 即子像素覆盖度（ClearType），其 max 可作为 grayscale 覆盖。
+            // 黑底白字 → 像素的 RGB 即 ClearType 三个子像素的覆盖度。直接取 max 会因相位错位
+            // 形成硬边/相位锯齿；ANTIALIASED_QUALITY 又只有 17 级 AA 阶梯明显。这里对 R+G+B
+            // 取平均（≈ 整像素的真实覆盖率，256 级灰度），与 GDI 直绘屏幕在视觉上一致。
             var rect = new NativeInterop.RECT { Left = 0, Top = 0, Right = w, Bottom = h };
             nint blackBrush = NativeInterop.CreateSolidBrush(0x000000);
             NativeInterop.FillRect(memDC, ref rect, blackBrush);
@@ -178,9 +155,12 @@ internal sealed unsafe class GdiTextAtlas : IDisposable
                 int srcRow = y * stride;
                 for (int x = 0; x < w; x++)
                 {
-                    // grayscale AA 下 R=G=B，直接读 R 通道（DIB BGRA → 偏移 2）。
-                    byte cov = src[srcRow + x * 4 + 2];
-                    _cpuAtlas[dstRow + x] = cov;
+                    // ClearType 输出：B=右子像素、G=中、R=左 (BGRA in DIB)。取三通道平均得到
+                    // 整像素覆盖率（256 级灰度），避免 max(R,G,B) 的过粗硬边。
+                    int off = srcRow + x * 4;
+                    int avg = (src[off] + src[off + 1] + src[off + 2] + 1) / 3;
+                    if (avg > 255) avg = 255;
+                    _cpuAtlas[dstRow + x] = (byte)avg;
                 }
             }
 
@@ -287,9 +267,7 @@ internal sealed unsafe class GdiTextAtlas : IDisposable
     {
         if (TextureView.IsNotNull) wgpuTextureViewRelease(TextureView);
         if (Texture.IsNotNull) { wgpuTextureDestroy(Texture); wgpuTextureRelease(Texture); }
-        foreach (var h in _aaFonts.Values)
-            if (h != 0) NativeInterop.DeleteObject(h);
-        _aaFonts.Clear();
+        // HFONT 由 GdiText 持有的 cache 统一管理，这里不需要释放。
         _cache.Clear();
     }
 }

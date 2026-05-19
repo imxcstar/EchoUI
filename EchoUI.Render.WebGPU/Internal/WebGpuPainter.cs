@@ -264,7 +264,10 @@ internal sealed class WebGpuPainter
 
         // 用 GDI 栅格化整条文本 → atlas region；painter 只画一个/几个矩形，绘制结果与
         // GdiPainter.DrawText 完全一致（同一字体、同一 DrawText 调用、同一 ClearType 输出）。
-        _batch.SetTexture(_textAtlas.TextureView, _pipeline.PointSampler);
+        // 使用 LinearSampler：在 identity 变换 + 整像素对齐下，双线性在纹素中心采样等同 point；
+        // 但在旋转/缩放下会正确做过滤，避免点采样导致的阶梯锯齿（与 GdiPainter 一致：GDI+
+        // 在 World Transform 下也对位图做线性插值）。
+        _batch.SetTexture(_textAtlas.TextureView, _pipeline.LinearSampler);
 
         var text = el.Text!;
         float baseX = MathF.Round(el.AbsoluteX);
