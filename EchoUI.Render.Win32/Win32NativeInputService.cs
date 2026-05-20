@@ -90,9 +90,9 @@ internal sealed class Win32NativeInputService
         _requestRepaint(element);
     }
 
-    public void UpdatePositions(Win32Element root, float viewportWidth, float viewportHeight)
+    public void UpdatePositions(Win32Element root, float viewportWidth, float viewportHeight, IReadOnlyList<Win32Element>? floatingElements = null)
     {
-        UpdatePositionsRecursive(root, viewportWidth, viewportHeight);
+        UpdatePositionsRecursive(root, viewportWidth, viewportHeight, floatingElements ?? []);
     }
 
     public void Release(Win32Element element)
@@ -139,16 +139,16 @@ internal sealed class Win32NativeInputService
         return new string(buffer, 0, len);
     }
 
-    private void UpdatePositionsRecursive(Win32Element element, float viewportWidth, float viewportHeight)
+    private void UpdatePositionsRecursive(Win32Element element, float viewportWidth, float viewportHeight, IReadOnlyList<Win32Element> floatingElements)
     {
         if (element.EditHwnd != 0)
-            UpdateElementPosition(element, viewportWidth, viewportHeight);
+            UpdateElementPosition(element, viewportWidth, viewportHeight, floatingElements);
 
         foreach (var child in element.Children)
-            UpdatePositionsRecursive(child, viewportWidth, viewportHeight);
+            UpdatePositionsRecursive(child, viewportWidth, viewportHeight, floatingElements);
     }
 
-    private static void UpdateElementPosition(Win32Element element, float viewportWidth, float viewportHeight)
+    private static void UpdateElementPosition(Win32Element element, float viewportWidth, float viewportHeight, IReadOnlyList<Win32Element> floatingElements)
     {
         var padding = ResolvePadding(element.Padding, element.LayoutWidth, viewportWidth, viewportHeight);
         var border = GetBorderInset(element);
@@ -175,9 +175,16 @@ internal sealed class Win32NativeInputService
             return;
         }
 
+        var region = CreateEditVisibleRegion(element, editRect, visibleRect, floatingElements);
+        if (region == 0)
+        {
+            NativeInterop.ShowWindow(element.EditHwnd, NativeInterop.SW_HIDE);
+            return;
+        }
+
         NativeInterop.ShowWindow(element.EditHwnd, NativeInterop.SW_SHOW);
         NativeInterop.MoveWindow(element.EditHwnd, x, y, w, h, true);
-        ApplyEditClipRegion(element.EditHwnd, editRect, visibleRect);
+        ApplyEditClipRegion(element.EditHwnd, region);
     }
 
     private static RectF GetEditClipRect(Win32Element element, float viewportWidth, float viewportHeight)
@@ -199,25 +206,85 @@ internal sealed class Win32NativeInputService
         return clipRect;
     }
 
-    private static void ApplyEditClipRegion(nint hwnd, RectF editRect, RectF visibleRect)
+    private static nint CreateEditVisibleRegion(Win32Element element, RectF editRect, RectF visibleRect, IReadOnlyList<Win32Element> floatingElements)
     {
-        if (visibleRect.Left <= editRect.Left && visibleRect.Top <= editRect.Top &&
-            visibleRect.Right >= editRect.Right && visibleRect.Bottom >= editRect.Bottom)
-        {
-            NativeInterop.SetWindowRgn(hwnd, 0, true);
-            return;
-        }
-
         var left = Math.Max(0, (int)Math.Floor(visibleRect.Left - editRect.Left));
         var top = Math.Max(0, (int)Math.Floor(visibleRect.Top - editRect.Top));
         var right = Math.Max(left, (int)Math.Ceiling(visibleRect.Right - editRect.Left));
         var bottom = Math.Max(top, (int)Math.Ceiling(visibleRect.Bottom - editRect.Top));
-
         var region = NativeInterop.CreateRectRgn(left, top, right, bottom);
-        if (region == 0) return;
+        if (region == 0)
+            return 0;
 
+        foreach (var floating in GetOccludingFloatingElements(element, floatingElements))
+        {
+            var floatingBounds = Win32VisualBounds.GetVisualBounds(floating, floating.AbsoluteBounds);
+            var occlusion = RectF.Intersect(visibleRect, ToRectF(floatingBounds));
+            if (occlusion.Width <= 0 || occlusion.Height <= 0)
+                continue;
+
+            var occlusionRegion = NativeInterop.CreateRectRgn(
+                Math.Max(0, (int)Math.Floor(occlusion.Left - editRect.Left)),
+                Math.Max(0, (int)Math.Floor(occlusion.Top - editRect.Top)),
+                Math.Max(0, (int)Math.Ceiling(occlusion.Right - editRect.Left)),
+                Math.Max(0, (int)Math.Ceiling(occlusion.Bottom - editRect.Top)));
+            if (occlusionRegion == 0)
+                continue;
+
+            var combineResult = NativeInterop.CombineRgn(region, region, occlusionRegion, NativeInterop.RGN_DIFF);
+            NativeInterop.DeleteObject(occlusionRegion);
+            if (combineResult == NativeInterop.NULLREGION)
+            {
+                NativeInterop.DeleteObject(region);
+                return 0;
+            }
+        }
+
+        return region;
+    }
+
+    private static void ApplyEditClipRegion(nint hwnd, nint region)
+    {
         if (NativeInterop.SetWindowRgn(hwnd, region, true) == 0)
             NativeInterop.DeleteObject(region);
+    }
+
+    private static RectF ToRectF(LayoutBox bounds)
+    {
+        return new RectF(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+
+    private static IEnumerable<Win32Element> GetOccludingFloatingElements(Win32Element element, IReadOnlyList<Win32Element> floatingElements)
+    {
+        var ownFloatIndex = -1;
+        for (var i = 0; i < floatingElements.Count; i++)
+        {
+            if (IsAncestorOf(floatingElements[i], element))
+                ownFloatIndex = i;
+        }
+
+        for (var i = ownFloatIndex + 1; i < floatingElements.Count; i++)
+        {
+            var floating = floatingElements[i];
+            if (ReferenceEquals(floating, element) || IsAncestorOf(floating, element))
+                continue;
+
+            yield return floating;
+        }
+    }
+
+    private static bool IsAncestorOf(Win32Element candidateAncestor, Win32Element element)
+    {
+        var current = element.Parent;
+        while (current != null)
+        {
+            if (ReferenceEquals(current, candidateAncestor))
+                return true;
+
+            current = current.Parent;
+        }
+
+        return false;
     }
 
     private static float GetEditPreferredHeight(Win32Element element)

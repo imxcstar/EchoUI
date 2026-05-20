@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using EchoUI.Core;
 
@@ -132,9 +133,10 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
             if (frame == null)
                 continue;
 
+            CpuRenderBuffer? buffer = null;
             try
             {
-                var buffer = RentRenderBuffer(frame.Width, frame.Height);
+                buffer = RentRenderBuffer(frame.Width, frame.Height);
                 CopyFrontBuffer(buffer);
                 GdiPainter.PaintFrame(buffer.Hdc, frame, buffer.Surface);
 
@@ -143,11 +145,13 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
                     if (_disposed)
                     {
                         buffer.Dispose();
+                        buffer = null;
                         return;
                     }
 
                     var oldFront = _frontBuffer;
                     _frontBuffer = buffer;
+                    buffer = null;
                     _spareBuffer = oldFront;
                     _completedDirtyBounds = frame.DirtyRects.Aggregate(LayoutBox.Zero, TileGrid.Union);
                     _completedVersion = frame.Version;
@@ -157,8 +161,15 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
                 if (hwnd != 0)
                     NativeInterop.PostMessage(hwnd, NativeInterop.WM_ECHOUI_RENDER_READY, 0, 0);
             }
-            catch
+            catch (Exception ex)
             {
+                buffer?.Dispose();
+                Trace.TraceError($"[EchoUI.Win32] CPU render failed: {ex}");
+                Debug.WriteLine($"[EchoUI.Win32] CPU render failed: {ex}");
+
+                var hwnd = _getHwnd();
+                if (hwnd != 0)
+                    NativeInterop.PostMessage(hwnd, NativeInterop.WM_ECHOUI_RENDER_FAILED, 0, 0);
             }
             finally
             {

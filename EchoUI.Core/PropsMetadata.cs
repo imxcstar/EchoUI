@@ -50,7 +50,7 @@ internal static class PropsMetadata
         new(nameof(ContainerProps.SuppressContextMenu), static props => ((ContainerProps)props).SuppressContextMenu, false),
         new(nameof(ContainerProps.OnFocus), static props => ((ContainerProps)props).OnFocus, null, IsDelegate: true),
         new(nameof(ContainerProps.OnBlur), static props => ((ContainerProps)props).OnBlur, null, IsDelegate: true),
-        new(nameof(ContainerProps.Direction), static props => ((ContainerProps)props).Direction, LayoutDirection.Vertical),
+        new(nameof(ContainerProps.Direction), static props => ((ContainerProps)props).Direction, LayoutDirection.Horizontal),
         new(nameof(ContainerProps.JustifyContent), static props => ((ContainerProps)props).JustifyContent, null),
         new(nameof(ContainerProps.AlignItems), static props => ((ContainerProps)props).AlignItems, null),
         new(nameof(ContainerProps.FlexGrow), static props => ((ContainerProps)props).FlexGrow, null),

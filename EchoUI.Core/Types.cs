@@ -397,7 +397,7 @@ namespace EchoUI.Core
         // --- Implicit Operator (already implemented) ---
 
         public static implicit operator ValueDictionary<TKey, TValue>(Dictionary<TKey, TValue> dictionary) =>
-            new(dictionary);
+            new(dictionary.ToDictionary(kvp => kvp.Key, kvp => (TValue?)kvp.Value));
     }
 
     // ──────────────── CSS Transform ────────────────

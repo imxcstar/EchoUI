@@ -116,9 +116,9 @@ namespace EchoUI.Render.Web
                     domPatch.Styles["display"] = "flex";
                     domPatch.Styles["box-sizing"] = "border-box";
                     domPatch.Styles["position"] = containerProps.Float ? "absolute" : "relative";
-                    domPatch.Styles["flex-direction"] = ToCss(containerProps.Direction ?? LayoutDirection.Vertical);
+                    domPatch.Styles["flex-direction"] = ToCss(containerProps.Direction ?? LayoutDefaults.Direction);
                     domPatch.Styles["justify-content"] = ToCss(containerProps.JustifyContent ?? JustifyContent.Start);
-                    domPatch.Styles["align-items"] = ToCss(containerProps.AlignItems ?? AlignItems.Start);
+                    domPatch.Styles["align-items"] = ToCss(containerProps.AlignItems ?? LayoutDefaults.AlignItems);
                     domPatch.Styles["overflow"] = containerProps.Float && !containerProps.Overflow.HasValue
                         ? "visible"
                         : ToCss(containerProps.Overflow ?? Overflow.Visible);
@@ -141,8 +141,8 @@ namespace EchoUI.Render.Web
                     }
                     domPatch.Attributes["data-eui-float"] = containerProps.Float ? "true" : "false";
                     domPatch.Attributes["data-eui-float-auto-width"] = containerProps.Float && !containerProps.Width.HasValue ? "true" : "false";
-                    domPatch.Styles["flex-shrink"] = containerProps.FlexShrink.HasValue ? containerProps.FlexShrink.Value.ToString() : "0";
-                    domPatch.Styles["flex-grow"] = containerProps.FlexGrow.HasValue ? containerProps.FlexGrow.Value.ToString() : "0";
+                    domPatch.Styles["flex-shrink"] = (containerProps.FlexShrink ?? LayoutDefaults.FlexShrink).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    domPatch.Styles["flex-grow"] = (containerProps.FlexGrow ?? LayoutDefaults.FlexGrow).ToString(System.Globalization.CultureInfo.InvariantCulture);
                     if (containerProps.Transform.HasValue)
                         domPatch.Styles["transform"] = ToCss(containerProps.Transform);
                     if (containerProps.TransformOrigin.HasValue)
@@ -243,7 +243,7 @@ namespace EchoUI.Render.Web
                             break;
 
                         // --- Flexbox ---
-                        case nameof(ContainerProps.Direction): domPatch.SetStyle("flex-direction", ToCss(propValue is LayoutDirection direction ? direction : LayoutDirection.Vertical)); break;
+                        case nameof(ContainerProps.Direction): domPatch.SetStyle("flex-direction", ToCss(propValue is LayoutDirection direction ? direction : LayoutDefaults.Direction)); break;
                         case nameof(ContainerProps.JustifyContent): domPatch.SetStyle("justify-content", ToCss(propValue as JustifyContent?)); break;
                         case nameof(ContainerProps.AlignItems): domPatch.SetStyle("align-items", ToCss(propValue as AlignItems?)); break;
                         case nameof(ContainerProps.Gap): domPatch.SetStyle("gap", propValue != null ? $"{propValue}px" : null); break;

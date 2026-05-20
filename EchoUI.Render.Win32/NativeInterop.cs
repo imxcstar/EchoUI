@@ -41,6 +41,7 @@ namespace EchoUI.Render.Win32
         // --- 自定义消息：用于调度更新 ---
         public const uint WM_ECHOUI_UPDATE = WM_APP + 1;
         public const uint WM_ECHOUI_RENDER_READY = WM_APP + 3;
+        public const uint WM_ECHOUI_RENDER_FAILED = WM_APP + 4;
 
         // --- Edit 控件通知 ---
         public const int EN_SETFOCUS = 0x0100;
@@ -83,6 +84,10 @@ namespace EchoUI.Render.Win32
         // --- ShowWindow ---
         public const int SW_HIDE = 0;
         public const int SW_SHOW = 5;
+
+        // --- Region ---
+        public const int NULLREGION = 1;
+        public const int RGN_DIFF = 4;
 
         // --- Virtual keys ---
         public const int VK_SHIFT = 0x10;
@@ -494,6 +499,9 @@ namespace EchoUI.Render.Win32
 
         [DllImport("gdi32.dll")]
         public static extern nint CreateRectRgn(int x1, int y1, int x2, int y2);
+
+        [DllImport("gdi32.dll")]
+        public static extern int CombineRgn(nint hrgnDst, nint hrgnSrc1, nint hrgnSrc2, int iMode);
 
         [DllImport("gdi32.dll")]
         public static extern bool DeleteObject(nint hObject);

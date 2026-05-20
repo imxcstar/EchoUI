@@ -195,6 +195,10 @@ namespace EchoUI.Render.Win32
                     OnEchoUIRenderReady(hWnd);
                     return 0;
 
+                case NativeInterop.WM_ECHOUI_RENDER_FAILED:
+                    OnEchoUIRenderFailed(hWnd);
+                    return 0;
+
                 case Win32SynchronizationContext.WM_SYNC_CONTEXT:
                     Win32SynchronizationContext.ProcessQueue();
                     return 0;
@@ -344,7 +348,9 @@ namespace EchoUI.Render.Win32
 
                 if (w > 0 && h > 0 && _renderer?.RootElement != null)
                 {
-                    var dirtyRect = new LayoutBox(ps.rcPaint.Left, ps.rcPaint.Top, Math.Max(0, ps.rcPaint.Width), Math.Max(0, ps.rcPaint.Height));
+                    var paintRect = ps.rcPaint;
+                    _renderer.PresentRenderFrame(ps.hdc, paintRect);
+                    var dirtyRect = new LayoutBox(paintRect.Left, paintRect.Top, Math.Max(0, paintRect.Width), Math.Max(0, paintRect.Height));
                     _renderer.SubmitRenderFrame(w, h, [dirtyRect]);
                 }
             }
@@ -555,6 +561,27 @@ namespace EchoUI.Render.Win32
             {
                 NativeInterop.ReleaseDC(hWnd, hdc);
             }
+        }
+
+        private void OnEchoUIRenderFailed(nint hWnd)
+        {
+            if (_renderer == null)
+                return;
+
+            var hdc = NativeInterop.GetDC(hWnd);
+            if (hdc != 0)
+            {
+                try
+                {
+                    _renderer.PresentRenderFrame(hdc);
+                }
+                finally
+                {
+                    NativeInterop.ReleaseDC(hWnd, hdc);
+                }
+            }
+
+            _renderer.RequestRepaint();
         }
     }
 }

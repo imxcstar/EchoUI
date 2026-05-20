@@ -621,8 +621,8 @@ namespace EchoUI.Render.Win32
 #endif
 
             SyncInstanceLayouts();
-            _nativeInputService.UpdatePositions(_rootElement, vpW, vpH);
             CollectFloatingElements();
+            _nativeInputService.UpdatePositions(_rootElement, vpW, vpH, _floatingElements);
             _layoutViewportWidth = vpW;
             _layoutViewportHeight = vpH;
             _layoutValid = true;
@@ -649,7 +649,7 @@ namespace EchoUI.Render.Win32
             {
                 _pendingNativeInputPositionSync = false;
                 if (_rootElement != null && _layoutViewportWidth > 0 && _layoutViewportHeight > 0)
-                    _nativeInputService.UpdatePositions(_rootElement, _layoutViewportWidth, _layoutViewportHeight);
+                    _nativeInputService.UpdatePositions(_rootElement, _layoutViewportWidth, _layoutViewportHeight, _floatingElements);
             }
 
             return _renderBackend.Present(hdc, clipRect);
@@ -709,22 +709,9 @@ namespace EchoUI.Render.Win32
             foreach (var child in element.Children)
             {
                 if (child.Float)
-                {
                     _floatingElements.Add(child);
-                    // 如果它是 Float 元素，我们把它作为独立的层。
-                    // 它的子元素如果也是 Float，通常是相对于它的（如下级菜单），
-                    // 所以我们暂时不把嵌套的 Float 提升到顶层，而是跟随这个 Float 元素。
-                    // 但这里策略是：只要是 Float，就收集？
-                    // 如果 A(Float) -> B(Float)，B 是 A 的子元素。
-                    // 如果 Paint(A) 会 Paint(B)。
-                    // 如果我们收集了 A，GdiPainter 会 Paint(A)。
-                    // 此时我们不应该再收集 B，否则 B 会被画两次（一次在 A 内部，一次作为 Top Layer）。
-                    // 所以：一旦遇到 Float，加入列表，并且不再遍历其子元素寻找 Float。
-                }
-                else
-                {
-                    CollectFloatingElementsRecursive(child);
-                }
+
+                CollectFloatingElementsRecursive(child);
             }
         }
 
@@ -832,18 +819,13 @@ namespace EchoUI.Render.Win32
         private void InvalidateElementBounds(Win32Element element)
         {
             const int padding = 3;
-            var shadowBlur = element.Shadow.IsVisible
-                ? (int)Math.Ceiling(Math.Max(0, element.Shadow.Blur))
-                : 0;
-            var shadowBottom = element.Shadow.IsVisible
-                ? (int)Math.Ceiling(Math.Max(0, element.Shadow.OffsetY + element.Shadow.Blur))
-                : 0;
+            var visualBounds = Win32VisualBounds.GetVisualBounds(element, element.AbsoluteBounds);
             var rect = new NativeInterop.RECT
             {
-                Left = (int)Math.Floor(element.AbsoluteX) - padding - shadowBlur,
-                Top = (int)Math.Floor(element.AbsoluteY) - padding,
-                Right = (int)Math.Ceiling(element.AbsoluteX + element.LayoutWidth) + padding + shadowBlur,
-                Bottom = (int)Math.Ceiling(element.AbsoluteY + element.LayoutHeight) + padding + shadowBottom
+                Left = (int)Math.Floor(visualBounds.X) - padding,
+                Top = (int)Math.Floor(visualBounds.Y) - padding,
+                Right = (int)Math.Ceiling(visualBounds.X + visualBounds.Width) + padding,
+                Bottom = (int)Math.Ceiling(visualBounds.Y + visualBounds.Height) + padding
             };
 
             NativeInterop.InvalidateRect(_window.Hwnd, ref rect, false);
@@ -855,7 +837,7 @@ namespace EchoUI.Render.Win32
         public void UpdateAllEditPositions(float vpW, float vpH)
         {
             if (_rootElement != null)
-                _nativeInputService.UpdatePositions(_rootElement, vpW, vpH);
+                _nativeInputService.UpdatePositions(_rootElement, vpW, vpH, _floatingElements);
         }
 
         private static void ResetNativeStyle(Win32Element element)
