@@ -38,6 +38,7 @@ namespace EchoUI.Render.Win32
         private long _renderFrameVersion;
         private bool _forceFullFrameRender;
         private bool _pendingNativeInputPositionSync;
+        private long _nativeInputPositionSyncFrameVersion;
 
         private const double WheelSmoothingResetMs = 140.0;
         private const float WheelSmoothingAlpha = 0.55f;
@@ -597,7 +598,10 @@ namespace EchoUI.Render.Win32
             if (syncManagedLayout)
                 SyncInstanceLayouts();
             if (syncNativeInputs)
+            {
                 _pendingNativeInputPositionSync = true;
+                _nativeInputPositionSyncFrameVersion = long.MaxValue;
+            }
             RequestRepaint(scrollTarget);
         }
 
@@ -637,22 +641,29 @@ namespace EchoUI.Render.Win32
             var viewport = new LayoutBox(0, 0, width, height);
             var needsFullFrame = _forceFullFrameRender;
             var frameDirtyRects = needsFullFrame ? [viewport] : dirtyRects;
-            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, frameDirtyRects, Interlocked.Increment(ref _renderFrameVersion), RenderTileSize);
+            var frameVersion = Interlocked.Increment(ref _renderFrameVersion);
+            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, frameDirtyRects, frameVersion, RenderTileSize);
             if (needsFullFrame)
                 _forceFullFrameRender = false;
-            _renderBackend.Submit(frame);
+            var accepted = _renderBackend.TrySubmit(frame);
+            if (accepted && _pendingNativeInputPositionSync && _nativeInputPositionSyncFrameVersion == long.MaxValue)
+                _nativeInputPositionSyncFrameVersion = frameVersion;
         }
 
         internal bool PresentRenderFrame(nint hdc, NativeInterop.RECT? clipRect = null)
         {
-            if (_pendingNativeInputPositionSync)
+            var presented = _renderBackend.Present(hdc, clipRect);
+            if (presented &&
+                _pendingNativeInputPositionSync &&
+                _renderBackend.CompletedVersion >= _nativeInputPositionSyncFrameVersion)
             {
                 _pendingNativeInputPositionSync = false;
+                _nativeInputPositionSyncFrameVersion = 0;
                 if (_rootElement != null && _layoutViewportWidth > 0 && _layoutViewportHeight > 0)
                     _nativeInputService.UpdatePositions(_rootElement, _layoutViewportWidth, _layoutViewportHeight, _floatingElements);
             }
 
-            return _renderBackend.Present(hdc, clipRect);
+            return presented;
         }
 
         private void SyncInstanceLayouts()

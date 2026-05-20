@@ -42,11 +42,17 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
 
     public void Submit(RenderFrame frame)
     {
+        TrySubmit(frame);
+    }
+
+    public bool TrySubmit(RenderFrame frame)
+    {
         RenderFrame? dropped = null;
+        var accepted = false;
         lock (_gate)
         {
             if (_disposed)
-                return;
+                return false;
 
             if (_pendingFrame != null && IsFullFrame(_pendingFrame) && !IsFullFrame(frame))
             {
@@ -56,11 +62,13 @@ internal sealed class Win32CpuRenderBackend : IRenderFrameBackend
             {
                 dropped = _pendingFrame;
                 _pendingFrame = frame;
+                accepted = true;
                 Monitor.Pulse(_gate);
             }
         }
 
         DisposeFrameResources(dropped);
+        return accepted;
     }
 
     public bool Present(nint targetHdc, NativeInterop.RECT? clipRect = null)
