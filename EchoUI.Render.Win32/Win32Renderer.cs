@@ -361,7 +361,7 @@ namespace EchoUI.Render.Win32
                     {
                         _imageService.Load(element, src);
                     }
-                    else if (propValue == null && element.NativeImageHandle != 0)
+                    else if (propValue == null && element.ImageResource != null)
                     {
                         _imageService.Clear(element);
                     }
@@ -541,7 +541,11 @@ namespace EchoUI.Render.Win32
             _renderPipeline.ForceFullFrame();
             _layoutValid = false;
             NativeInterop.GetClientRect(_window.Hwnd, out var rect);
-            EnsureLayout(rect.Width, rect.Height);
+            if (rect.Width > 0 && rect.Height > 0)
+            {
+                EnsureLayout(rect.Width, rect.Height);
+                _renderPipeline.SubmitFrame(rect.Width, rect.Height, [new LayoutBox(0, 0, rect.Width, rect.Height)], RenderTileSize);
+            }
             NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
         }
 

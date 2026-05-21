@@ -60,11 +60,22 @@ internal sealed class Win32ImageBitmap : IDisposable
 
     private static void CopyPixels(ImageResource resource, nint destinationBits, int destinationStride)
     {
-        var source = resource.Pixels.ToArray();
+        if (!MemoryMarshal.TryGetArray(resource.Pixels, out ArraySegment<byte> segment) || segment.Array == null)
+        {
+            var source = resource.Pixels.ToArray();
+            CopyPixels(source, 0, resource, destinationBits, destinationStride);
+            return;
+        }
+
+        CopyPixels(segment.Array, segment.Offset, resource, destinationBits, destinationStride);
+    }
+
+    private static void CopyPixels(byte[] source, int sourceBaseOffset, ImageResource resource, nint destinationBits, int destinationStride)
+    {
         var rowBytes = Math.Min(destinationStride, resource.Stride);
         for (var y = 0; y < resource.Height; y++)
         {
-            var sourceOffset = checked(y * resource.Stride);
+            var sourceOffset = checked(sourceBaseOffset + y * resource.Stride);
             var destinationOffset = checked(y * destinationStride);
             Marshal.Copy(source, sourceOffset, destinationBits + destinationOffset, rowBytes);
         }

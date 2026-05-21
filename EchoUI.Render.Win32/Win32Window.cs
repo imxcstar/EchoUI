@@ -21,6 +21,7 @@ namespace EchoUI.Render.Win32
         private int _backBufferStride;
         private int _backBufferWidth;
         private int _backBufferHeight;
+        private bool _shown;
 
         // 防止 WndProc 委托被 GC 回收
         private NativeInterop.WndProc? _wndProcDelegate;
@@ -42,7 +43,7 @@ namespace EchoUI.Render.Win32
         /// <summary>
         /// 创建 Win32 窗口
         /// </summary>
-        public void Create()
+        public void Create(bool show = true)
         {
             var hInstance = NativeInterop.GetModuleHandle(null);
             _wndProcDelegate = WndProc;
@@ -79,8 +80,20 @@ namespace EchoUI.Render.Win32
 
             Win32SynchronizationContext.SetWindow(_hwnd);
 
+            if (show)
+                Show();
+        }
+
+        public void Show()
+        {
+            if (_hwnd == 0)
+                throw new InvalidOperationException("窗口尚未创建");
+            if (_shown)
+                return;
+
             NativeInterop.ShowWindow(_hwnd, NativeInterop.SW_SHOW);
             NativeInterop.UpdateWindow(_hwnd);
+            _shown = true;
         }
 
         /// <summary>

@@ -10,7 +10,7 @@ var syncCtx = new Win32SynchronizationContext();
 SynchronizationContext.SetSynchronizationContext(syncCtx);
 
 var window = new Win32Window("EchoUI Win32 Demo", 1200, 800);
-window.Create();
+window.Create(show: false);
 
 var backendKind = ResolveBackendKind(args);
 var renderer = new Win32Renderer(window, backendKind);
@@ -20,6 +20,7 @@ await reconciler.Mount(Demo.Render);
 
 // 初始布局
 renderer.RequestRelayout();
+window.Show();
 
 // 进入消息循环（阻塞）
 window.Run();

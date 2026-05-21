@@ -56,6 +56,29 @@ namespace EchoUI.Core
             var selectedOptionText = (selectIndex.Value >= 0 && selectIndex.Value < props.Options.Count)
                 ? props.Options[selectIndex.Value]
                 : "Select...";
+            var longestOptionText = Hooks.Memo(() =>
+            {
+                var longest = "Select...";
+                foreach (var option in props.Options)
+                {
+                    if ((option?.Length ?? 0) > longest.Length)
+                        longest = option ?? string.Empty;
+                }
+
+                return longest;
+            }, [props.Options]);
+            var longestOptionWidth = MeasureText(new TextMeasurementRequest
+            {
+                Text = longestOptionText,
+                FontSize = 14,
+                FontWeight = "600"
+            }).Width;
+            var arrowWidth = MeasureText(new TextMeasurementRequest
+            {
+                Text = "▼",
+                FontSize = 10
+            }).Width;
+            var minControlWidth = Math.Max(96, longestOptionWidth + arrowWidth + 64);
 
             var dropdownItems = new List<Element>();
             if (isOpen.Value)
@@ -128,6 +151,7 @@ namespace EchoUI.Core
             return Container(new ContainerProps
             {
                 Key = props.Key,
+                MinWidth = Dimension.Pixels(minControlWidth),
                 Direction = LayoutDirection.Vertical,
                 Overflow = Overflow.Visible,
                 OnBlur = () =>

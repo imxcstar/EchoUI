@@ -1,7 +1,10 @@
+using System.Runtime.InteropServices;
 using EchoUI.Core;
 using EchoUI.Core.Text;
+using Vortice.DCommon;
 using Vortice.Direct2D1;
 using Vortice.DirectWrite;
+using Vortice.DXGI;
 using Vortice.Mathematics;
 using EchoColor = EchoUI.Core.Color;
 
@@ -13,6 +16,7 @@ internal sealed class Direct2DResourceCache : IDisposable
     private readonly Dictionary<uint, ID2D1SolidColorBrush> _brushes = [];
     private readonly Dictionary<BorderStyle, ID2D1StrokeStyle?> _strokeStyles = [];
     private readonly Dictionary<TextFormatKey, IDWriteTextFormat> _textFormats = [];
+    private readonly Dictionary<ImageResource, ID2D1Bitmap> _bitmaps = [];
     private ID2D1RenderTarget? _target;
     private bool _disposed;
 
@@ -87,6 +91,36 @@ internal sealed class Direct2DResourceCache : IDisposable
         return format;
     }
 
+    public ID2D1Bitmap GetBitmap(ImageResource image)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_target == null)
+            throw new InvalidOperationException("Direct2D render target has not been set.");
+
+        if (_bitmaps.TryGetValue(image, out var bitmap))
+            return bitmap;
+
+        if (!MemoryMarshal.TryGetArray(image.Pixels, out ArraySegment<byte> segment) || segment.Array == null)
+            segment = new ArraySegment<byte>(image.Pixels.ToArray());
+
+        var handle = GCHandle.Alloc(segment.Array, GCHandleType.Pinned);
+        try
+        {
+            var properties = new BitmapProperties(new PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied));
+            bitmap = _target.CreateBitmap(
+                new SizeI(image.Width, image.Height),
+                handle.AddrOfPinnedObject() + segment.Offset,
+                (uint)image.Stride,
+                properties);
+            _bitmaps[image] = bitmap;
+            return bitmap;
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
     public void ResetRenderTarget()
     {
         ClearTargetResources();
@@ -115,6 +149,10 @@ internal sealed class Direct2DResourceCache : IDisposable
         foreach (var strokeStyle in _strokeStyles.Values)
             strokeStyle?.Dispose();
         _strokeStyles.Clear();
+
+        foreach (var bitmap in _bitmaps.Values)
+            bitmap.Dispose();
+        _bitmaps.Clear();
     }
 
     private static uint PackColor(EchoColor color)

@@ -208,19 +208,9 @@ internal sealed class Direct2DCommandExecutor : IDisposable
         if (command.Image.Format != ImagePixelFormat.Bgra8888Premultiplied)
             return;
 
-        var properties = new BitmapProperties(new PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied));
-        var pixels = command.Image.Pixels.ToArray();
-        var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
-        try
-        {
-            using var d2dBitmap = _target.CreateBitmap(new SizeI(command.Image.Width, command.Image.Height), handle.AddrOfPinnedObject(), (uint)command.Image.Stride, properties);
-            var dest = ToRawRect(command.Layout);
-            _target.DrawBitmap(d2dBitmap, dest, 1f, BitmapInterpolationMode.Linear, null);
-        }
-        finally
-        {
-            handle.Free();
-        }
+        var d2dBitmap = _resources.GetBitmap(command.Image);
+        var dest = ToRawRect(command.Layout);
+        _target.DrawBitmap(d2dBitmap, dest, 1f, BitmapInterpolationMode.Linear, null);
     }
 
     private void PushClipCommand(PushClip command)

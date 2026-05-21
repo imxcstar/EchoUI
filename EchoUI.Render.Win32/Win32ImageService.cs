@@ -17,10 +17,16 @@ internal sealed class Win32ImageService
                 return;
 
             Clear(element);
-            element.NativeImageHandle = bitmap;
-            element.NativeImageWidth = width;
-            element.NativeImageHeight = height;
-            element.ImageResource = CreateImageResource(bitmap, width, height);
+            try
+            {
+                element.NativeImageWidth = width;
+                element.NativeImageHeight = height;
+                element.ImageResource = CreateImageResource(bitmap, width, height);
+            }
+            finally
+            {
+                NativeInterop.DeleteObject(bitmap);
+            }
         }
         catch
         {
