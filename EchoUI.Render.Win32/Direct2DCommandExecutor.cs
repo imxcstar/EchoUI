@@ -64,6 +64,11 @@ internal sealed class Direct2DCommandExecutor : IDisposable
         _resources.ResetRenderTarget();
     }
 
+    public ID2D1SolidColorBrush GetBrush(EchoColor color)
+    {
+        return _resources.GetBrush(color);
+    }
+
     private void ExecuteOne(RenderCommand command)
     {
         switch (command)

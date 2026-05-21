@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using EchoUI.Core;
+using Vortice;
+using Vortice.DCommon;
+using Vortice.Direct2D1;
 using Vortice.Mathematics;
 
 namespace EchoUI.Render.Win32;
@@ -17,8 +20,8 @@ internal sealed class Win32Direct2DRenderBackend : IWin32RenderFrameBackend
     public RenderBackendKind Kind => RenderBackendKind.Gpu;
 
     public RenderBackendCapabilities Capabilities { get; } = new(
-        RequiresFullFrame: true,
-        SupportsPartialInvalidation: false,
+        RequiresFullFrame: false,
+        SupportsPartialInvalidation: true,
         PresentsDirectlyToWindow: true,
         IsHardwareAccelerated: true);
 
@@ -85,8 +88,16 @@ internal sealed class Win32Direct2DRenderBackend : IWin32RenderFrameBackend
 
             var target = _targetManager.EnsureRenderTarget(hwnd, frame.Width, frame.Height);
             target.BeginDraw();
-            target.Clear(ToColor4(EchoUI.Core.Color.White));
-            _executor.Execute(target, frame.Commands);
+            if (IsFullFrame(frame))
+            {
+                target.Clear(ToColor4(EchoUI.Core.Color.White));
+                _executor.Execute(target, frame.Commands);
+            }
+            else
+            {
+                foreach (var dirty in frame.DirtyRects)
+                    RenderDirtyRegion(target, frame, dirty);
+            }
             target.EndDraw(out _, out _);
 
             lock (_gate)
@@ -147,6 +158,41 @@ internal sealed class Win32Direct2DRenderBackend : IWin32RenderFrameBackend
             if (command is IDisposable disposable)
                 disposable.Dispose();
         }
+    }
+
+    private void RenderDirtyRegion(Vortice.Direct2D1.ID2D1RenderTarget target, RenderFrame frame, LayoutBox dirty)
+    {
+        if (dirty.Width <= 0 || dirty.Height <= 0)
+            return;
+
+        var clip = ToRawRect(dirty);
+        target.PushAxisAlignedClip(clip, AntialiasMode.PerPrimitive);
+        try
+        {
+            target.FillRectangle(clip, _executor.GetBrush(EchoUI.Core.Color.White));
+            _executor.Execute(target, frame.Commands);
+        }
+        finally
+        {
+            target.PopAxisAlignedClip();
+        }
+    }
+
+    private static bool IsFullFrame(RenderFrame frame)
+    {
+        if (frame.DirtyRects.Count != 1)
+            return false;
+
+        var dirty = frame.DirtyRects[0];
+        return dirty.X <= 0
+            && dirty.Y <= 0
+            && dirty.Width >= frame.Width
+            && dirty.Height >= frame.Height;
+    }
+
+    private static RawRectF ToRawRect(LayoutBox layout)
+    {
+        return new RawRectF(layout.X, layout.Y, layout.X + layout.Width, layout.Y + layout.Height);
     }
 
     private static Vortice.Mathematics.Color4 ToColor4(EchoUI.Core.Color color)

@@ -12,10 +12,15 @@ namespace EchoUI.Render.Win32;
 
 internal sealed class Direct2DResourceCache : IDisposable
 {
+    private const int MaxBrushes = 256;
+    private const int MaxTextFormats = 128;
+
     private readonly IDWriteFactory _writeFactory;
-    private readonly Dictionary<uint, ID2D1SolidColorBrush> _brushes = [];
+    private readonly Dictionary<uint, BrushCacheEntry> _brushes = [];
+    private readonly LinkedList<uint> _brushLru = [];
     private readonly Dictionary<BorderStyle, ID2D1StrokeStyle?> _strokeStyles = [];
-    private readonly Dictionary<TextFormatKey, IDWriteTextFormat> _textFormats = [];
+    private readonly Dictionary<TextFormatKey, TextFormatCacheEntry> _textFormats = [];
+    private readonly LinkedList<TextFormatKey> _textFormatLru = [];
     private readonly Dictionary<ImageResource, ID2D1Bitmap> _bitmaps = [];
     private ID2D1RenderTarget? _target;
     private bool _disposed;
@@ -41,12 +46,16 @@ internal sealed class Direct2DResourceCache : IDisposable
             throw new InvalidOperationException("Direct2D render target has not been set.");
 
         var key = PackColor(color);
-        if (!_brushes.TryGetValue(key, out var brush))
+        if (_brushes.TryGetValue(key, out var entry))
         {
-            brush = _target.CreateSolidColorBrush(ToColor4(color));
-            _brushes[key] = brush;
+            Touch(_brushLru, entry.Node);
+            return entry.Brush;
         }
 
+        var brush = _target.CreateSolidColorBrush(ToColor4(color));
+        var node = _brushLru.AddFirst(key);
+        _brushes[key] = new BrushCacheEntry(brush, node);
+        TrimBrushes();
         return brush;
     }
 
@@ -79,15 +88,19 @@ internal sealed class Direct2DResourceCache : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var key = TextFormatKey.From(style);
-        if (!_textFormats.TryGetValue(key, out var format))
+        if (_textFormats.TryGetValue(key, out var entry))
         {
-            format = _writeFactory.CreateTextFormat(key.FontFamily, null, key.FontWeight, FontStyle.Normal, FontStretch.Normal, key.FontSize, string.Empty);
-            format.TextAlignment = TextAlignment.Leading;
-            format.ParagraphAlignment = ParagraphAlignment.Near;
-            format.WordWrapping = WordWrapping.NoWrap;
-            _textFormats[key] = format;
+            Touch(_textFormatLru, entry.Node);
+            return entry.Format;
         }
 
+        var format = _writeFactory.CreateTextFormat(key.FontFamily, null, key.FontWeight, FontStyle.Normal, FontStretch.Normal, key.FontSize, string.Empty);
+        format.TextAlignment = TextAlignment.Leading;
+        format.ParagraphAlignment = ParagraphAlignment.Near;
+        format.WordWrapping = WordWrapping.NoWrap;
+        var node = _textFormatLru.AddFirst(key);
+        _textFormats[key] = new TextFormatCacheEntry(format, node);
+        TrimTextFormats();
         return format;
     }
 
@@ -134,17 +147,19 @@ internal sealed class Direct2DResourceCache : IDisposable
 
         _disposed = true;
         ClearTargetResources();
-        foreach (var format in _textFormats.Values)
-            format.Dispose();
+        foreach (var entry in _textFormats.Values)
+            entry.Format.Dispose();
         _textFormats.Clear();
+        _textFormatLru.Clear();
         _writeFactory.Dispose();
     }
 
     private void ClearTargetResources()
     {
-        foreach (var brush in _brushes.Values)
-            brush.Dispose();
+        foreach (var entry in _brushes.Values)
+            entry.Brush.Dispose();
         _brushes.Clear();
+        _brushLru.Clear();
 
         foreach (var strokeStyle in _strokeStyles.Values)
             strokeStyle?.Dispose();
@@ -153,6 +168,37 @@ internal sealed class Direct2DResourceCache : IDisposable
         foreach (var bitmap in _bitmaps.Values)
             bitmap.Dispose();
         _bitmaps.Clear();
+    }
+
+    private void TrimBrushes()
+    {
+        while (_brushes.Count > MaxBrushes && _brushLru.Last != null)
+        {
+            var key = _brushLru.Last.Value;
+            _brushLru.RemoveLast();
+            if (_brushes.Remove(key, out var entry))
+                entry.Brush.Dispose();
+        }
+    }
+
+    private void TrimTextFormats()
+    {
+        while (_textFormats.Count > MaxTextFormats && _textFormatLru.Last != null)
+        {
+            var key = _textFormatLru.Last.Value;
+            _textFormatLru.RemoveLast();
+            if (_textFormats.Remove(key, out var entry))
+                entry.Format.Dispose();
+        }
+    }
+
+    private static void Touch<T>(LinkedList<T> lru, LinkedListNode<T> node)
+    {
+        if (!ReferenceEquals(lru.First, node))
+        {
+            lru.Remove(node);
+            lru.AddFirst(node);
+        }
     }
 
     private static uint PackColor(EchoColor color)
@@ -175,5 +221,17 @@ internal sealed class Direct2DResourceCache : IDisposable
                 : FontWeight.Normal;
             return new TextFormatKey(family, style.EffectiveFontSize, weight);
         }
+    }
+
+    private sealed class BrushCacheEntry(ID2D1SolidColorBrush brush, LinkedListNode<uint> node)
+    {
+        public ID2D1SolidColorBrush Brush { get; } = brush;
+        public LinkedListNode<uint> Node { get; } = node;
+    }
+
+    private sealed class TextFormatCacheEntry(IDWriteTextFormat format, LinkedListNode<TextFormatKey> node)
+    {
+        public IDWriteTextFormat Format { get; } = format;
+        public LinkedListNode<TextFormatKey> Node { get; } = node;
     }
 }
