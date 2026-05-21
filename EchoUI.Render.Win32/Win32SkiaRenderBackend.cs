@@ -1,22 +1,23 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using EchoUI.Core;
+using SkiaSharp;
 
 namespace EchoUI.Render.Win32;
 
-internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
+internal sealed class Win32SkiaRenderBackend : IWin32RenderFrameBackend
 {
     private readonly Func<nint> _getHwnd;
     private readonly object _gate = new();
     private readonly Thread _thread;
     private RenderFrame? _pendingFrame;
-    private CpuRenderBuffer? _frontBuffer;
-    private CpuRenderBuffer? _spareBuffer;
+    private SkiaRenderBuffer? _frontBuffer;
+    private SkiaRenderBuffer? _spareBuffer;
     private LayoutBox _completedDirtyBounds;
     private long _completedVersion;
     private bool _disposed;
 
-    public RenderBackendKind Kind => RenderBackendKind.Cpu;
+    public RenderBackendKind Kind => RenderBackendKind.Gpu;
 
     public RenderBackendCapabilities Capabilities { get; } = new(
         RequiresFullFrame: false,
@@ -35,13 +36,13 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
         }
     }
 
-    public Win32CpuRenderBackend(Func<nint> getHwnd)
+    public Win32SkiaRenderBackend(Func<nint> getHwnd)
     {
         _getHwnd = getHwnd;
         _thread = new Thread(RenderLoop)
         {
             IsBackground = true,
-            Name = "EchoUI Win32 CPU Render"
+            Name = "EchoUI Win32 Skia Render"
         };
         _thread.Start();
     }
@@ -147,12 +148,12 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
             if (frame == null)
                 continue;
 
-            CpuRenderBuffer? buffer = null;
+            SkiaRenderBuffer? buffer = null;
             try
             {
                 buffer = RentRenderBuffer(frame.Width, frame.Height);
                 CopyFrontBuffer(buffer);
-                GdiPainter.PaintFrame(buffer.Hdc, frame, buffer.Surface);
+                PaintFrame(buffer, frame);
 
                 lock (_gate)
                 {
@@ -178,8 +179,8 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
             catch (Exception ex)
             {
                 buffer?.Dispose();
-                Trace.TraceError($"[EchoUI.Win32] CPU render failed: {ex}");
-                Debug.WriteLine($"[EchoUI.Win32] CPU render failed: {ex}");
+                Trace.TraceError($"[EchoUI.Win32] Skia render failed: {ex}");
+                Debug.WriteLine($"[EchoUI.Win32] Skia render failed: {ex}");
 
                 var hwnd = _getHwnd();
                 if (hwnd != 0)
@@ -192,7 +193,7 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
         }
     }
 
-    private CpuRenderBuffer RentRenderBuffer(int width, int height)
+    private SkiaRenderBuffer RentRenderBuffer(int width, int height)
     {
         lock (_gate)
         {
@@ -207,10 +208,10 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
             _spareBuffer = null;
         }
 
-        return CpuRenderBuffer.Create(width, height);
+        return SkiaRenderBuffer.Create(width, height);
     }
 
-    private void CopyFrontBuffer(CpuRenderBuffer target)
+    private void CopyFrontBuffer(SkiaRenderBuffer target)
     {
         lock (_gate)
         {
@@ -218,6 +219,40 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
                 return;
 
             NativeInterop.BitBlt(target.Hdc, 0, 0, target.Width, target.Height, _frontBuffer.Hdc, 0, 0, NativeInterop.SRCCOPY);
+        }
+    }
+
+    private static void PaintFrame(SkiaRenderBuffer buffer, RenderFrame frame)
+    {
+        var canvas = buffer.Surface.Canvas;
+        if (frame.DirtyTiles.Count > 0)
+        {
+            foreach (var tile in frame.DirtyTiles)
+                PaintFrameRegion(canvas, frame, tile.Bounds);
+        }
+        else
+        {
+            foreach (var dirty in frame.DirtyRects)
+                PaintFrameRegion(canvas, frame, dirty);
+        }
+
+        canvas.Flush();
+    }
+
+    private static void PaintFrameRegion(SKCanvas canvas, RenderFrame frame, LayoutBox region)
+    {
+        if (region.Width <= 0 || region.Height <= 0)
+            return;
+
+        canvas.Save();
+        try
+        {
+            canvas.ClipRect(new SKRect(region.X, region.Y, region.X + region.Width, region.Y + region.Height), SKClipOperation.Intersect, antialias: true);
+            SkiaCommandExecutor.Execute(canvas, frame.Commands);
+        }
+        finally
+        {
+            canvas.Restore();
         }
     }
 
@@ -256,19 +291,20 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
         };
     }
 
-    private sealed class CpuRenderBuffer : IDisposable
+    private sealed class SkiaRenderBuffer : IDisposable
     {
         private nint _bitmap;
         private nint _oldBitmap;
+        private SKSurface? _surface;
 
         public nint Hdc { get; private set; }
         public nint Bits { get; private set; }
         public int Width { get; }
         public int Height { get; }
         public int Stride { get; }
-        public CpuBitmapSurface Surface => new(Bits, Width, Height, Stride);
+        public SKSurface Surface => _surface ?? throw new ObjectDisposedException(nameof(SkiaRenderBuffer));
 
-        private CpuRenderBuffer(nint hdc, nint bitmap, nint oldBitmap, nint bits, int width, int height, int stride)
+        private SkiaRenderBuffer(nint hdc, nint bitmap, nint oldBitmap, nint bits, int width, int height, int stride, SKSurface surface)
         {
             Hdc = hdc;
             _bitmap = bitmap;
@@ -277,9 +313,10 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
             Width = width;
             Height = height;
             Stride = stride;
+            _surface = surface;
         }
 
-        public static CpuRenderBuffer Create(int width, int height)
+        public static SkiaRenderBuffer Create(int width, int height)
         {
             var screenDc = NativeInterop.GetDC(0);
             if (screenDc == 0)
@@ -315,8 +352,11 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
                     throw new InvalidOperationException("Cannot create DIB section.");
                 }
 
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var surface = SKSurface.Create(info, bits, stride)
+                    ?? throw new InvalidOperationException("Cannot create Skia surface.");
                 var oldBitmap = NativeInterop.SelectObject(memoryDc, bitmap);
-                return new CpuRenderBuffer(memoryDc, bitmap, oldBitmap, bits, width, height, stride);
+                return new SkiaRenderBuffer(memoryDc, bitmap, oldBitmap, bits, width, height, stride, surface);
             }
             finally
             {
@@ -326,6 +366,9 @@ internal sealed class Win32CpuRenderBackend : IWin32RenderFrameBackend
 
         public void Dispose()
         {
+            _surface?.Dispose();
+            _surface = null;
+
             if (Hdc != 0)
             {
                 if (_oldBitmap != 0)

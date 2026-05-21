@@ -150,12 +150,10 @@ internal static class Win32FrameRecorder
 
     private static void AddImageCommand(Win32Element element, LayoutBox bounds, List<RenderCommand> commands)
     {
-        if (element.NativeImageHandle == 0 || element.NativeImageWidth <= 0 || element.NativeImageHeight <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
+        if (element.ImageResource == null || bounds.Width <= 0 || bounds.Height <= 0)
             return;
 
-        var copy = NativeInterop.CopyImage(element.NativeImageHandle, NativeInterop.IMAGE_BITMAP, 0, 0, NativeInterop.LR_CREATEDIBSECTION);
-        if (copy != 0)
-            commands.Add(new Win32DrawImage(bounds, copy, element.NativeImageWidth, element.NativeImageHeight));
+        commands.Add(new DrawImage(bounds, element.ImageResource));
     }
 
     private static void AddScrollbarCommands(Win32Element element, LayoutBox bounds, List<RenderCommand> commands)

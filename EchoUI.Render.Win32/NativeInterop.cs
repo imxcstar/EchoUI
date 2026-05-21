@@ -211,6 +211,18 @@ namespace EchoUI.Render.Win32
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct BITMAP
+        {
+            public int bmType;
+            public int bmWidth;
+            public int bmHeight;
+            public int bmWidthBytes;
+            public ushort bmPlanes;
+            public ushort bmBitsPixel;
+            public nint bmBits;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct GdiplusStartupInput
         {
             public uint GdiplusVersion;
@@ -505,6 +517,9 @@ namespace EchoUI.Render.Win32
 
         [DllImport("gdi32.dll")]
         public static extern bool DeleteObject(nint hObject);
+
+        [DllImport("gdi32.dll", EntryPoint = "GetObjectW")]
+        public static extern bool GetObject(nint hgdiobj, int cbBuffer, out BITMAP lpvObject);
 
         [DllImport("gdi32.dll")]
         public static extern nint CreateCompatibleDC(nint hdc);

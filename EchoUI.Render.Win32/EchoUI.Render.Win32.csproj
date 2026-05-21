@@ -7,6 +7,9 @@
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="SkiaSharp" Version="2.88.8" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.8" />
+		<PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
 		<ProjectReference Include="..\EchoUI.Core\EchoUI.Core.csproj" />
 	</ItemGroup>
 </Project>

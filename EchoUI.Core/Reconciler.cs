@@ -143,11 +143,14 @@ namespace EchoUI.Core
                 }
                 else if (elementType.IsAsyncComponent)
                 {
+                    var renderVersion = ++instance.AsyncRenderVersion;
                     var renderTask = ((AsyncComponent)elementType.AsComponentDelegate)(props);
+                    instance.RenderingTask = renderTask;
                     if (renderTask.IsCompletedSuccessfully)
                     {
                         resultElement = renderTask.Result;
                         instance.HasCompletedInitialRender = true;
+                        instance.IsAsyncPlaceholder = false;
                     }
                     else
                     {
@@ -156,22 +159,32 @@ namespace EchoUI.Core
                             instance.IsAsyncPlaceholder = true;
                             _ = renderTask.ContinueWith(task =>
                             {
+                                if (!ReferenceEquals(instance.RenderingTask, task) || renderVersion != instance.AsyncRenderVersion)
+                                    return;
+
+                                if (task.IsCanceled)
+                                    return;
+
                                 if (task.Exception != null)
                                 {
                                     var diagnosticException = CreateDiagnosticException("rendering async component", instance, task.Exception.GetBaseException());
                                     ReportDiagnosticException(diagnosticException);
-                                    throw diagnosticException;
+                                    return;
                                 }
 
                                 instance.HasCompletedInitialRender = true;
+                                instance.IsAsyncPlaceholder = false;
                                 ScheduleUpdate(instance);
                             }, TaskScheduler.FromCurrentSynchronizationContext());
                             resultElement = props.Fallback;
                         }
                         else
                         {
-                            await renderTask;
-                            resultElement = renderTask.Result;
+                            resultElement = await renderTask;
+                            if (!ReferenceEquals(instance.RenderingTask, renderTask) || renderVersion != instance.AsyncRenderVersion)
+                                return instance.Children.FirstOrDefault()?.Element;
+                            instance.HasCompletedInitialRender = true;
+                            instance.IsAsyncPlaceholder = false;
                         }
                     }
                 }
@@ -311,6 +324,12 @@ namespace EchoUI.Core
                 }
 
                 await MountInstance(newInstance);
+                return;
+            }
+
+            if (!newElement.Type.IsNative && !instance.IsAsyncPlaceholder && AreComponentPropsEqual(oldElement.Props, newElement.Props))
+            {
+                instance.Element = newElement;
                 return;
             }
 
@@ -455,6 +474,12 @@ namespace EchoUI.Core
 
         #endregion
 
+        private static bool AreComponentPropsEqual(Props oldProps, Props newProps)
+        {
+            var comparer = newProps.AreEqual ?? oldProps.AreEqual;
+            return comparer != null && comparer(oldProps, newProps);
+        }
+
         private async Task DiffChildren(ComponentInstance parent, IReadOnlyList<Element> newChildElements)
         {
             try
@@ -463,9 +488,8 @@ namespace EchoUI.Core
             var newChildren = new List<ComponentInstance>();
             var newInstancesCreated = new List<ComponentInstance>();
 
-            var oldKeyedChildren = oldChildren
-                .Where(c => c.Element.Props.Key != null)
-                .ToDictionary(c => c.Element.Props.Key!);
+            ValidateUniqueChildKeys(parent, newChildElements);
+            var oldKeyedChildren = BuildKeyedChildMap(parent, oldChildren);
 
             var processedOldChildren = new HashSet<ComponentInstance>();
 
@@ -553,6 +577,33 @@ namespace EchoUI.Core
             catch (Exception ex)
             {
                 throw CreateDiagnosticException("diffing children", parent, ex);
+            }
+        }
+
+        private static Dictionary<string, ComponentInstance> BuildKeyedChildMap(ComponentInstance parent, IReadOnlyList<ComponentInstance> oldChildren)
+        {
+            var result = new Dictionary<string, ComponentInstance>(StringComparer.Ordinal);
+            foreach (var child in oldChildren)
+            {
+                var key = child.Element.Props.Key;
+                if (key == null)
+                    continue;
+
+                if (!result.TryAdd(key, child))
+                    throw new InvalidOperationException($"Duplicate existing child key \"{key}\" under {DescribeElement(parent.Element)}.");
+            }
+
+            return result;
+        }
+
+        private static void ValidateUniqueChildKeys(ComponentInstance parent, IReadOnlyList<Element> newChildElements)
+        {
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var child in newChildElements)
+            {
+                var key = child.Props.Key;
+                if (key != null && !keys.Add(key))
+                    throw new InvalidOperationException($"Duplicate new child key \"{key}\" under {DescribeElement(parent.Element)}.");
             }
         }
 

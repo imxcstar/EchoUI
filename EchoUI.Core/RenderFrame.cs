@@ -6,6 +6,16 @@ public enum RenderBackendKind
     Gpu
 }
 
+public sealed record RenderBackendCapabilities(
+    bool RequiresFullFrame,
+    bool SupportsPartialInvalidation,
+    bool PresentsDirectlyToWindow,
+    bool IsHardwareAccelerated,
+    bool SupportsImageResources = true,
+    bool SupportsNativeText = true,
+    bool SupportsVectorText = true,
+    bool SupportsAdvancedClipping = true);
+
 public readonly record struct RenderTileId(int X, int Y);
 
 public readonly record struct RenderTile(RenderTileId Id, LayoutBox Bounds, LayoutBox DirtyBounds, int Priority = 0);
@@ -25,6 +35,8 @@ public sealed record RenderFrame(
 public interface IRenderFrameBackend : IDisposable
 {
     RenderBackendKind Kind { get; }
+
+    RenderBackendCapabilities Capabilities { get; }
 
     void Submit(RenderFrame frame);
 }

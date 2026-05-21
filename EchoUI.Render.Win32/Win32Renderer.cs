@@ -24,7 +24,8 @@ namespace EchoUI.Render.Win32
         private readonly Win32ImageService _imageService;
         private readonly Win32InputMethodService _inputMethodService;
         private readonly Win32NativeInputService _nativeInputService;
-        private readonly Win32CpuRenderBackend _renderBackend;
+        private readonly Win32NativeOverlayManager _nativeOverlayManager;
+        private readonly Win32RenderPipeline _renderPipeline;
         private bool _disposed;
         private bool _layoutValid;
         private float _layoutViewportWidth;
@@ -35,10 +36,6 @@ namespace EchoUI.Render.Win32
         private readonly Stopwatch _wheelSmoothingStopwatch = Stopwatch.StartNew();
         private float _smoothedWheelPixels;
         private long _lastWheelSmoothingTimestamp;
-        private long _renderFrameVersion;
-        private bool _forceFullFrameRender;
-        private bool _pendingNativeInputPositionSync;
-        private long _nativeInputPositionSyncFrameVersion;
 
         private const double WheelSmoothingResetMs = 140.0;
         private const float WheelSmoothingAlpha = 0.55f;
@@ -55,14 +52,27 @@ namespace EchoUI.Render.Win32
         /// </summary>
         public bool SmoothScrollEnabled { get; set; }
 
-        public Win32Renderer(Win32Window window)
+        public Win32Renderer(Win32Window window, Win32RenderBackendKind backendKind = Win32RenderBackendKind.Direct2D)
         {
             _window = window;
             PlatformServices = new Win32PlatformServices();
             _imageService = new Win32ImageService();
             _inputMethodService = new Win32InputMethodService(() => _window.Hwnd);
             _nativeInputService = new Win32NativeInputService(() => _window.Hwnd, RequestRepaint);
-            _renderBackend = new Win32CpuRenderBackend(() => _window.Hwnd);
+            _nativeOverlayManager = new Win32NativeOverlayManager(_nativeInputService);
+            IWin32RenderFrameBackend renderBackend = backendKind switch
+            {
+                Win32RenderBackendKind.Cpu => new Win32CpuRenderBackend(() => _window.Hwnd),
+                Win32RenderBackendKind.Skia => new Win32SkiaRenderBackend(() => _window.Hwnd),
+                Win32RenderBackendKind.Direct2D => new Win32Direct2DRenderBackend(() => _window.Hwnd),
+                _ => new Win32Direct2DRenderBackend(() => _window.Hwnd)
+            };
+            _renderPipeline = new Win32RenderPipeline(
+                renderBackend,
+                _nativeOverlayManager,
+                () => _rootInstance,
+                () => _rootElement,
+                () => _floatingElements);
             _hitTestManager = new HitTestManager<Win32Element>(new HitTestPlatform<Win32Element>
             {
                 GetFloatingElements = () => _floatingElements,
@@ -516,7 +526,7 @@ namespace EchoUI.Render.Win32
 
             _rootInstance = null;
             _floatingElements.Clear();
-            _renderBackend.Dispose();
+            _renderPipeline.Dispose();
         }
 
         // --- 布局与重绘 ---
@@ -528,7 +538,7 @@ namespace EchoUI.Render.Win32
         {
             if (_rootElement == null || _window.Hwnd == 0) return;
 
-            _forceFullFrameRender = true;
+            _renderPipeline.ForceFullFrame();
             _layoutValid = false;
             NativeInterop.GetClientRect(_window.Hwnd, out var rect);
             EnsureLayout(rect.Width, rect.Height);
@@ -599,8 +609,7 @@ namespace EchoUI.Render.Win32
                 SyncInstanceLayouts();
             if (syncNativeInputs)
             {
-                _pendingNativeInputPositionSync = true;
-                _nativeInputPositionSyncFrameVersion = long.MaxValue;
+                _renderPipeline.RequestNativeOverlaySync();
             }
             RequestRepaint(scrollTarget);
         }
@@ -626,7 +635,7 @@ namespace EchoUI.Render.Win32
 
             SyncInstanceLayouts();
             CollectFloatingElements();
-            _nativeInputService.UpdatePositions(_rootElement, vpW, vpH, _floatingElements);
+            _nativeOverlayManager.SyncPositions(_rootElement, vpW, vpH, _floatingElements);
             _layoutViewportWidth = vpW;
             _layoutViewportHeight = vpH;
             _layoutValid = true;
@@ -638,32 +647,12 @@ namespace EchoUI.Render.Win32
                 return;
 
             EnsureLayout(width, height);
-            var viewport = new LayoutBox(0, 0, width, height);
-            var needsFullFrame = _forceFullFrameRender;
-            var frameDirtyRects = needsFullFrame ? [viewport] : dirtyRects;
-            var frameVersion = Interlocked.Increment(ref _renderFrameVersion);
-            var frame = Win32FrameRecorder.Record(_rootInstance, _rootElement, _floatingElements, width, height, frameDirtyRects, frameVersion, RenderTileSize);
-            if (needsFullFrame)
-                _forceFullFrameRender = false;
-            var accepted = _renderBackend.TrySubmit(frame);
-            if (accepted && _pendingNativeInputPositionSync && _nativeInputPositionSyncFrameVersion == long.MaxValue)
-                _nativeInputPositionSyncFrameVersion = frameVersion;
+            _renderPipeline.SubmitFrame(width, height, dirtyRects, RenderTileSize);
         }
 
         internal bool PresentRenderFrame(nint hdc, NativeInterop.RECT? clipRect = null)
         {
-            var presented = _renderBackend.Present(hdc, clipRect);
-            if (presented &&
-                _pendingNativeInputPositionSync &&
-                _renderBackend.CompletedVersion >= _nativeInputPositionSyncFrameVersion)
-            {
-                _pendingNativeInputPositionSync = false;
-                _nativeInputPositionSyncFrameVersion = 0;
-                if (_rootElement != null && _layoutViewportWidth > 0 && _layoutViewportHeight > 0)
-                    _nativeInputService.UpdatePositions(_rootElement, _layoutViewportWidth, _layoutViewportHeight, _floatingElements);
-            }
-
-            return presented;
+            return _renderPipeline.Present(hdc, clipRect, _layoutViewportWidth, _layoutViewportHeight);
         }
 
         private void SyncInstanceLayouts()
@@ -782,7 +771,7 @@ namespace EchoUI.Render.Win32
             if (_window.Hwnd == 0)
                 return;
 
-            _forceFullFrameRender = true;
+            _renderPipeline.ForceFullFrame();
             NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
         }
 
@@ -801,7 +790,7 @@ namespace EchoUI.Render.Win32
 
             if (element == null || element.LayoutWidth <= 0 || element.LayoutHeight <= 0)
             {
-                _forceFullFrameRender = true;
+                _renderPipeline.ForceFullFrame();
                 NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
                 return;
             }
@@ -816,7 +805,7 @@ namespace EchoUI.Render.Win32
 
             if (first == null && second == null)
             {
-                _forceFullFrameRender = true;
+                _renderPipeline.ForceFullFrame();
                 NativeInterop.InvalidateRect(_window.Hwnd, 0, false);
                 return;
             }
@@ -848,7 +837,7 @@ namespace EchoUI.Render.Win32
         public void UpdateAllEditPositions(float vpW, float vpH)
         {
             if (_rootElement != null)
-                _nativeInputService.UpdatePositions(_rootElement, vpW, vpH, _floatingElements);
+                _nativeOverlayManager.SyncPositions(_rootElement, vpW, vpH, _floatingElements);
         }
 
         private static void ResetNativeStyle(Win32Element element)

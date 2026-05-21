@@ -82,7 +82,7 @@ internal static class Win32CommandExecutor
                 DrawTextLayoutCommand(hdc, d.Layout, d.TextLayout, element?.TextColor);
                 break;
 
-            case Win32DrawImage d:
+            case DrawImage d:
                 DrawImageCommand(hdc, d);
                 break;
 
@@ -176,17 +176,18 @@ internal static class Win32CommandExecutor
         }
     }
 
-    private static void DrawImageCommand(nint hdc, Win32DrawImage command)
+    private static void DrawImageCommand(nint hdc, DrawImage command)
     {
-        if (command.Bitmap == 0 || command.SourceWidth <= 0 || command.SourceHeight <= 0 || command.Layout.Width <= 0 || command.Layout.Height <= 0)
+        if (command.Image.Width <= 0 || command.Image.Height <= 0 || command.Image.Pixels.IsEmpty || command.Layout.Width <= 0 || command.Layout.Height <= 0)
             return;
 
         GdiPlus.Flush();
+        using var bitmap = Win32ImageBitmap.FromResource(command.Image);
         var imageDc = NativeInterop.CreateCompatibleDC(hdc);
         if (imageDc == 0)
             return;
 
-        var oldBitmap = NativeInterop.SelectObject(imageDc, command.Bitmap);
+        var oldBitmap = NativeInterop.SelectObject(imageDc, bitmap.Handle);
         try
         {
             NativeInterop.SetStretchBltMode(hdc, NativeInterop.HALFTONE);
@@ -199,8 +200,8 @@ internal static class Win32CommandExecutor
                 imageDc,
                 0,
                 0,
-                command.SourceWidth,
-                command.SourceHeight,
+                command.Image.Width,
+                command.Image.Height,
                 NativeInterop.SRCCOPY);
         }
         finally

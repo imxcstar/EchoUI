@@ -1645,7 +1645,7 @@ public static class Showcase
 
                 Card("State Demo",
                 [
-                    Container(new ContainerProps { AlignItems = AlignItems.Center, Gap = 16, Children =
+                    Container(new ContainerProps { Direction = LayoutDirection.Vertical, AlignItems = AlignItems.Center, Gap = 16, Children =
                     [
                         Text(new TextProps
                         {

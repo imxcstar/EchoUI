@@ -35,6 +35,15 @@ public sealed record DrawText(
 /// <summary>已完成布局的文本绘制命令，可供后端或测试直接复用。</summary>
 public sealed record DrawTextLayout(LayoutBox Layout, TextLayoutResult TextLayout) : RenderCommand(Layout);
 
+public sealed record ImageResource(ReadOnlyMemory<byte> Pixels, int Width, int Height, int Stride, ImagePixelFormat Format);
+
+public enum ImagePixelFormat
+{
+    Bgra8888Premultiplied
+}
+
+public sealed record DrawImage(LayoutBox Layout, ImageResource Image) : RenderCommand(Layout);
+
 /// <summary>绘制边框</summary>
 public sealed record DrawBorder(LayoutBox Layout, Color Color, float Width, float Radius, BorderStyle Style) : RenderCommand(Layout);
 

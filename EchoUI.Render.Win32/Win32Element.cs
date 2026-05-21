@@ -39,6 +39,7 @@ namespace EchoUI.Render.Win32
         public nint NativeImageHandle { get; set; }
         public int NativeImageWidth { get; set; }
         public int NativeImageHeight { get; set; }
+        public ImageResource? ImageResource { get; set; }
 
         // --- GDI/GDI+ 路径缓存 ---
         public nint RoundedFillPath { get; set; }

@@ -22,6 +22,7 @@ namespace EchoUI.Core
         // Async component support
         public Task? RenderingTask { get; set; }
         public bool IsAsyncPlaceholder { get; set; }
+        public long AsyncRenderVersion { get; set; }
 
         public ComponentInstance(Element element, ComponentInstance? parent, Reconciler reconciler)
         {
